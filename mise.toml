@@ -1,0 +1,111 @@
+# everes のビルドと導入。
+#
+# 想定フロー:
+#   mise run check     # fmt / vet / test
+#   mise run install   # ~/bin/everes へ配置
+#   mise run deploy    # apm で Skill と hook を配布
+#   mise run dev-setup # 開発用にCLIとSkillをsourceへリンク
+
+[tools]
+# パッチバージョンまで固定する。ツールチェーンの差異でビルドが割れるのを避ける。
+go = "1.26.6"
+
+[env]
+BIN_DIR = "{{env.HOME}}/bin"
+# apm.yml の version と揃える。ズレるとSkillとCLIの対応が追えなくなる。
+EVERES_VERSION = "0.2.0"
+
+[tasks.build]
+description = "everes をビルドして build/ へ出力"
+run = "go build -trimpath -ldflags \"-X github.com/tsuyukimakoto/everes/internal/cli.Version=$EVERES_VERSION\" -o build/everes ./cmd/everes"
+
+[tasks.fmt]
+description = "gofmt を適用"
+run = "go fmt ./..."
+
+[tasks.vet]
+description = "go vet を実行"
+run = "go vet ./..."
+
+[tasks.test]
+description = "テストを実行"
+run = "go test ./..."
+
+[tasks.check]
+description = "fmt / vet / test をまとめて実行"
+depends = ["fmt", "vet", "test"]
+
+[tasks.install]
+description = "ビルドして $BIN_DIR/everes へ配置"
+depends = ["build"]
+shell = "bash -c"
+run = '''
+set -euo pipefail
+mkdir -p "$BIN_DIR"
+install -m 0755 build/everes "$BIN_DIR/everes"
+echo "installed: $("$BIN_DIR/everes" version)"
+case ":$PATH:" in
+    *":$BIN_DIR:"*) ;;
+    *) echo "warn: PATH に $BIN_DIR がありません。シェルの設定に追加してください" >&2 ;;
+esac
+'''
+
+[tasks.deploy]
+description = "apm で Skill と hook を Claude / Codex へ配布"
+shell = "bash -c"
+run = '''
+set -euo pipefail
+apm install -g "$(pwd)" --target claude,codex
+apm install -g "$(pwd)/.apm/packages/everes-claude-hook" --target claude
+apm install -g "$(pwd)/.apm/packages/everes-codex-hook" --target codex
+'''
+
+[tasks.dev-link]
+description = "CLIとSkillを開発中のsourceへシンボリックリンク"
+depends = ["build"]
+shell = "bash -c"
+run = '''
+set -euo pipefail
+project_root="$(pwd -P)"
+
+link_source() {
+    source_path="$1"
+    destination="$2"
+    backup="$3"
+
+    mkdir -p "$(dirname "$destination")"
+    mkdir -p "$(dirname "$backup")"
+
+    if [ -L "$destination" ]; then
+        rm -f "$destination"
+    elif [ -e "$destination" ]; then
+        if [ ! -e "$backup" ]; then
+            mv "$destination" "$backup"
+            echo "backup: $backup"
+        elif [ -d "$source_path" ] && [ -d "$destination" ] && diff -qr "$source_path" "$destination" >/dev/null; then
+            rm -rf "$destination"
+        elif [ -f "$source_path" ] && [ -f "$destination" ] && cmp -s "$source_path" "$destination"; then
+            rm -f "$destination"
+        else
+            echo "error: $destination は既存のbackupと異なる内容です" >&2
+            exit 1
+        fi
+    fi
+
+    ln -s "$source_path" "$destination"
+    echo "linked: $destination -> $source_path"
+}
+
+link_source "$project_root/build/everes" "$BIN_DIR/everes" "$HOME/.everes/install-backups/bin-everes"
+link_source "$project_root/.apm/skills/everes-task" "$HOME/.agents/skills/everes-task" "$HOME/.everes/install-backups/agents-skill-everes-task"
+link_source "$project_root/.apm/skills/everes-task" "$HOME/.claude/skills/everes-task" "$HOME/.everes/install-backups/claude-skill-everes-task"
+'''
+
+[tasks.dev-setup]
+description = "hookを配布し、CLIとSkillを開発中のsourceへリンク"
+shell = "bash -c"
+run = '''
+set -euo pipefail
+mise run deploy
+mise run dev-link
+'''

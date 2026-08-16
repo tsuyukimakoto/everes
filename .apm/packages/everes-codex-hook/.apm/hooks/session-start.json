@@ -1,0 +1,14 @@
+{
+  "SessionStart": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"$HOME/bin/everes\" hook session-start --provider codex",
+          "timeout": 5
+        }
+      ]
+    }
+  ]
+}

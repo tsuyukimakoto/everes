@@ -1,0 +1,15 @@
+/build/
+.DS_Store
+/.everes/
+
+.env
+.env.*
+!.env.example
+
+/.idea/
+/.vscode/
+
+*.log
+*.prof
+*.test
+/coverage.out

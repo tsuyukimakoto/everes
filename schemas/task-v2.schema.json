@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tsuyukimakoto/everes/schemas/task-v2.schema.json",
+  "title": "Everes Task",
+  "description": "~/.everes/tasks/<task-id>.json の構造。core storage仕様は言語非依存とする。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "revision",
+    "title",
+    "status",
+    "timestamps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "task_id": {
+      "type": "string",
+      "description": "ULID。内部では常に完全なIDを使う。",
+      "pattern": "^[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "更新のたびに1つ増える。楽観ロックに使う。"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "objective": {
+      "type": "string",
+      "description": "この作業が何を目的としているか。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "waiting", "needs_me", "paused", "done"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Task全体の現在地。明示statusを持つAgent Sessionがあれば集約値。"
+    },
+    "next_action": {
+      "type": "string",
+      "description": "次に実際に行う作業。"
+    },
+    "resume_when": {
+      "type": "string",
+      "description": "いつこのTaskに戻ればよいか。waitingでは特に重要。"
+    },
+    "check_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "waitingを次に確認する日時。UTC offsetを含む。"
+    },
+    "check_action": {
+      "type": "string",
+      "minLength": 1,
+      "description": "check_atを過ぎたら確認する対象または操作。"
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cwd": { "type": "string" },
+        "repo_root": { "type": "string" },
+        "git_remote": { "type": "string" },
+        "branch": { "type": "string" },
+        "worktree": { "type": ["string", "null"] }
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "url"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": [
+              "github_issue",
+              "github_pr",
+              "google_doc",
+              "google_sheet",
+              "google_slide",
+              "notion",
+              "jira",
+              "linear",
+              "web",
+              "file",
+              "other"
+            ]
+          },
+          "title": { "type": "string" },
+          "url": { "type": "string" },
+          "metadata": {
+            "type": "object",
+            "description": "将来のAPI integration用。V1では使用しない。",
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "created_at"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "text": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "agent_sessions": {
+      "type": "array",
+      "description": "1つのTaskに複数のAgent Sessionが存在してよく、それぞれ独立したstatusを持つ。",
+      "items": {
+        "type": "object",
+        "required": ["provider", "session_id", "created_at", "last_seen_at"],
+        "additionalProperties": false,
+        "properties": {
+          "provider": { "type": "string" },
+          "session_id": { "type": "string" },
+          "cwd": { "type": "string" },
+          "label": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["active", "waiting", "needs_me", "paused", "done"],
+            "description": "v1から移行した未操作sessionでは省略される。"
+          },
+          "summary": { "type": "string" },
+          "next_action": { "type": "string" },
+          "resume_when": { "type": "string" },
+          "check_at": { "type": "string", "format": "date-time" },
+          "check_action": { "type": "string", "minLength": 1 },
+          "completed_at": { "type": "string", "format": "date-time" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "last_seen_at": { "type": "string", "format": "date-time" }
+        },
+        "allOf": [
+          {
+            "if": { "required": ["check_at"] },
+            "then": {
+              "required": ["check_action", "status"],
+              "properties": { "status": { "const": "waiting" } }
+            }
+          },
+          {
+            "if": { "required": ["check_action"] },
+            "then": { "required": ["check_at"] }
+          }
+        ]
+      }
+    },
+    "timestamps": {
+      "type": "object",
+      "required": ["created_at", "updated_at"],
+      "additionalProperties": false,
+      "properties": {
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["check_at"] },
+      "then": {
+        "required": ["check_action"],
+        "properties": { "status": { "const": "waiting" } }
+      }
+    },
+    {
+      "if": { "required": ["check_action"] },
+      "then": { "required": ["check_at"] }
+    }
+  ]
+}
