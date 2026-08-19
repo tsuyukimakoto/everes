@@ -44,60 +44,140 @@ func renderListWithLinks(w io.Writer, tasks []*task.Task, now time.Time, links b
 }
 
 func renderListItem(w io.Writer, t *task.Task, now time.Time, links bool) {
-	fmt.Fprintf(w, "  %s  %s\n", task.ShortID(t.TaskID), t.Title)
+	fmt.Fprintf(w, "╭─ %s  %s\n", task.ShortID(t.TaskID), t.Title)
+	fmt.Fprintf(w, "│  Task  %s (%s) · %s\n",
+		t.Status.Label(), sessionCountLabel(len(t.AgentSessions)), relTime(t.Timestamps.UpdatedAt, now))
 
 	if t.Summary != "" {
-		fmt.Fprintf(w, "    %s\n", t.Summary)
+		fmt.Fprintf(w, "│  現在地  %s\n", t.Summary)
 	}
 
 	if t.CheckAt != nil {
 		when := formatCheckAt(*t.CheckAt, now.Location())
 		if t.CheckDue(now) {
-			fmt.Fprintf(w, "    ! 確認時刻超過 (%s): %s\n", when, t.CheckAction)
+			fmt.Fprintf(w, "│  ! 確認時刻超過 (%s): %s\n", when, t.CheckAction)
 		} else {
-			fmt.Fprintf(w, "    確認予定 %s: %s\n", when, t.CheckAction)
-		}
-	}
-	for _, s := range t.AgentSessions {
-		if s.CheckAt == nil {
-			continue
-		}
-		when := formatCheckAt(*s.CheckAt, now.Location())
-		label := s.Label
-		if label == "" {
-			label = shortSessionID(s.SessionID)
-		}
-		if s.CheckDue(now) {
-			fmt.Fprintf(w, "    ! %s 確認時刻超過 (%s): %s\n", label, when, s.CheckAction)
-		} else {
-			fmt.Fprintf(w, "    %s 確認予定 %s: %s\n", label, when, s.CheckAction)
+			fmt.Fprintf(w, "│  確認予定 %s: %s\n", when, t.CheckAction)
 		}
 	}
 
 	// waitingではresume_whenが、それ以外ではnext_actionが最も知りたい情報になる。
-	if hint := listHint(t); hint != "" {
-		fmt.Fprintf(w, "    → %s\n", hint)
+	if label, hint := listHint(t); hint != "" {
+		fmt.Fprintf(w, "│  %s  %s\n", label, hint)
 	}
 
 	if refs := refSummary(t); refs != "" {
-		fmt.Fprintf(w, "    %s\n", refs)
+		fmt.Fprintf(w, "│  %s\n", refs)
 	}
 
-	if sessions := sessionSummary(t, links); sessions != "" {
-		fmt.Fprintf(w, "    %s\n", sessions)
+	if len(t.AgentSessions) > 0 {
+		fmt.Fprintln(w, "├─ Sessions")
+		for i, attached := range t.AgentSessions {
+			branch := "├─"
+			if i == len(t.AgentSessions)-1 {
+				branch = "└─"
+			}
+			renderSessionListItem(w, t, attached, branch, now, links)
+		}
 	}
-	if statuses := sessionStatusSummary(t); statuses != "" {
-		fmt.Fprintf(w, "    %s\n", statuses)
+	fmt.Fprintln(w, "╰─")
+}
+
+func sessionCountLabel(count int) string {
+	switch count {
+	case 0:
+		return "no sessions"
+	case 1:
+		return "1 session"
+	default:
+		return fmt.Sprintf("%d sessions", count)
 	}
-	for _, resume := range claudeResumeCommands(t) {
-		fmt.Fprintf(w, "      再開 %s: %s\n", sanitizeTerminalText(resume.Label), resume.Command)
+}
+
+func renderSessionListItem(w io.Writer, t *task.Task, attached task.AgentSession, branch string, now time.Time, links bool) {
+	status := strings.ToUpper(displaySessionStatus(attached.Status))
+	name := sessionDisplayName(attached, links)
+	activity := sessionActivity(attached, now)
+
+	fmt.Fprintf(w, "│  %s %-8s %s", branch, status, name)
+	if activity != "" {
+		fmt.Fprintf(w, " — %s", activity)
+	}
+	fmt.Fprintln(w)
+
+	if resume, ok := claudeResumeCommand(t, attached); ok {
+		fmt.Fprintf(w, "│     再開: %s\n", resume.Command)
+	}
+}
+
+func sessionDisplayName(attached task.AgentSession, links bool) string {
+	label := attached.Label
+	if label == "" {
+		label = shortSessionID(attached.SessionID)
+	}
+	text := attached.Provider + ":" + sanitizeTerminalText(label)
+	appURL, err := provider.SessionAppURL(provider.Session{
+		Provider:  attached.Provider,
+		SessionID: attached.SessionID,
+		Cwd:       attached.Cwd,
+		Label:     attached.Label,
+	})
+	if err != nil {
+		return text
+	}
+	text = "↗ " + text
+	if links {
+		return terminalLink(appURL, text)
+	}
+	return text
+}
+
+func sessionActivity(attached task.AgentSession, now time.Time) string {
+	var activity string
+	if attached.Summary != "" {
+		activity = "現在地: " + sanitizeTerminalText(attached.Summary)
 	}
 
-	meta := []string{relTime(t.Timestamps.UpdatedAt, now)}
-	if providers := providerSummary(t); providers != "" {
-		meta = append(meta, providers)
+	action := ""
+	switch attached.Status {
+	case task.StatusWaiting:
+		if attached.ResumeWhen != "" {
+			action = "再開条件: " + sanitizeTerminalText(attached.ResumeWhen)
+		} else if attached.NextAction != "" {
+			action = "次の作業: " + sanitizeTerminalText(attached.NextAction)
+		}
+	case task.StatusPaused:
+		if attached.ResumeWhen != "" {
+			action = "再開条件: " + sanitizeTerminalText(attached.ResumeWhen)
+		} else if attached.NextAction != "" {
+			action = "次の作業: " + sanitizeTerminalText(attached.NextAction)
+		}
+	default:
+		if attached.NextAction != "" {
+			action = "次の作業: " + sanitizeTerminalText(attached.NextAction)
+		}
 	}
-	fmt.Fprintf(w, "    %s\n", strings.Join(meta, "  "))
+	activity = joinActivity(activity, action)
+
+	if attached.CheckAt != nil {
+		when := formatCheckAt(*attached.CheckAt, now.Location())
+		check := fmt.Sprintf("確認予定: %s — %s", when, sanitizeTerminalText(attached.CheckAction))
+		if attached.CheckDue(now) {
+			check = fmt.Sprintf("! 確認時刻超過 (%s): %s", when, sanitizeTerminalText(attached.CheckAction))
+		}
+		activity = joinActivity(activity, check)
+	}
+	return activity
+}
+
+func joinActivity(current, next string) string {
+	if current == "" {
+		return next
+	}
+	if next == "" {
+		return current
+	}
+	return current + " / " + next
 }
 
 type sessionResumeCommand struct {
@@ -105,23 +185,19 @@ type sessionResumeCommand struct {
 	Command string
 }
 
-func claudeResumeCommands(t *task.Task) []sessionResumeCommand {
-	commands := make([]sessionResumeCommand, 0)
-	for _, attached := range t.AgentSessions {
-		if attached.Provider != "claude" {
-			continue
-		}
-		label := attached.Label
-		if label == "" {
-			label = shortSessionID(attached.SessionID)
-		}
-		commands = append(commands, sessionResumeCommand{
-			Label: label,
-			Command: fmt.Sprintf("everes session open %s --provider claude --session-id %s",
-				task.ShortID(t.TaskID), shellWord(attached.SessionID)),
-		})
+func claudeResumeCommand(t *task.Task, attached task.AgentSession) (sessionResumeCommand, bool) {
+	if attached.Provider != "claude" {
+		return sessionResumeCommand{}, false
 	}
-	return commands
+	label := attached.Label
+	if label == "" {
+		label = shortSessionID(attached.SessionID)
+	}
+	return sessionResumeCommand{
+		Label: label,
+		Command: fmt.Sprintf("everes session open %s --provider claude --session-id %s",
+			task.ShortID(t.TaskID), shellWord(attached.SessionID)),
+	}, true
 }
 
 func shellWord(value string) string {
@@ -132,52 +208,6 @@ func shellWord(value string) string {
 		return value
 	}
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
-}
-
-func sessionSummary(t *task.Task, links bool) string {
-	if len(t.AgentSessions) == 0 {
-		return ""
-	}
-	items := make([]string, 0, len(t.AgentSessions))
-	for _, attached := range t.AgentSessions {
-		label := attached.Label
-		if label == "" {
-			label = shortSessionID(attached.SessionID)
-		}
-		text := attached.Provider + ":" + sanitizeTerminalText(label) + " [" + displaySessionStatus(attached.Status) + "]"
-		appURL, err := provider.SessionAppURL(provider.Session{
-			Provider:  attached.Provider,
-			SessionID: attached.SessionID,
-			Cwd:       attached.Cwd,
-			Label:     attached.Label,
-		})
-		if err == nil {
-			text = "↗ " + text
-			if links {
-				text = terminalLink(appURL, text)
-			}
-		}
-		items = append(items, text)
-	}
-	return "sessions: " + strings.Join(items, "  ")
-}
-
-func sessionStatusSummary(t *task.Task) string {
-	counts := map[task.Status]int{}
-	for _, s := range t.AgentSessions {
-		counts[s.Status]++
-	}
-	order := []task.Status{task.StatusActive, task.StatusNeedsMe, task.StatusWaiting, task.StatusPaused, task.StatusDone, ""}
-	var items []string
-	for _, status := range order {
-		if counts[status] > 0 {
-			items = append(items, fmt.Sprintf("%d %s", counts[status], displaySessionStatus(status)))
-		}
-	}
-	if len(items) == 0 {
-		return ""
-	}
-	return "session status: " + strings.Join(items, " · ")
 }
 
 func terminalLink(target, label string) string {
@@ -207,21 +237,17 @@ func listGroup(t *task.Task, now time.Time) string {
 	return t.Status.Label()
 }
 
-func listHint(t *task.Task) string {
+func listHint(t *task.Task) (string, string) {
 	if t.Status == task.StatusWaiting && t.ResumeWhen != "" {
-		return t.ResumeWhen
-	}
-	if t.Status == task.StatusWaiting {
-		for _, s := range t.AgentSessions {
-			if s.Status == task.StatusWaiting && s.ResumeWhen != "" {
-				return s.ResumeWhen
-			}
-		}
+		return "再開条件", t.ResumeWhen
 	}
 	if t.NextAction != "" {
-		return t.NextAction
+		return "次の作業", t.NextAction
 	}
-	return t.ResumeWhen
+	if t.ResumeWhen != "" {
+		return "再開条件", t.ResumeWhen
+	}
+	return "", ""
 }
 
 func refSummary(t *task.Task) string {
@@ -233,29 +259,6 @@ func refSummary(t *task.Task) string {
 		titles = append(titles, r.Title)
 	}
 	return strings.Join(titles, " / ")
-}
-
-func providerSummary(t *task.Task) string {
-	counts := map[string]int{}
-	var names []string
-	for _, s := range t.AgentSessions {
-		if counts[s.Provider] == 0 {
-			names = append(names, s.Provider)
-		}
-		counts[s.Provider]++
-	}
-	if len(names) == 0 {
-		return ""
-	}
-	labels := make([]string, 0, len(names))
-	for _, name := range names {
-		if counts[name] == 1 {
-			labels = append(labels, name)
-		} else {
-			labels = append(labels, fmt.Sprintf("%s×%d", name, counts[name]))
-		}
-	}
-	return "[" + strings.Join(labels, ",") + "]"
 }
 
 // renderDetail はTaskの詳細を書き出す。

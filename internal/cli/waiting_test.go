@@ -45,7 +45,7 @@ func TestRenderListSeparatesOverdueWaiting(t *testing.T) {
 	}
 }
 
-func TestProviderSummaryShowsSessionCounts(t *testing.T) {
+func TestSessionCountLabelDistinguishesTaskFromSessions(t *testing.T) {
 	tk, err := task.New("複数session")
 	if err != nil {
 		t.Fatalf("task.New() error = %v", err)
@@ -56,12 +56,12 @@ func TestProviderSummaryShowsSessionCounts(t *testing.T) {
 		{Provider: "claude", SessionID: "claude-1"},
 	}
 
-	if got := providerSummary(tk); got != "[codex×2,claude]" {
-		t.Errorf("providerSummary() = %q; want %q", got, "[codex×2,claude]")
+	if got := sessionCountLabel(len(tk.AgentSessions)); got != "3 sessions" {
+		t.Errorf("sessionCountLabel() = %q; want %q", got, "3 sessions")
 	}
 }
 
-func TestSessionSummaryLinksCodexThreads(t *testing.T) {
+func TestSessionDisplayNameLinksCodexThreads(t *testing.T) {
 	tk, err := task.New("公開")
 	if err != nil {
 		t.Fatalf("task.New() error = %v", err)
@@ -71,20 +71,20 @@ func TestSessionSummaryLinksCodexThreads(t *testing.T) {
 		{Provider: "claude", SessionID: "claude-1", Label: "レビュー"},
 	}
 
-	plain := sessionSummary(tk, false)
-	if !strings.Contains(plain, "↗ codex:公開準備") || !strings.Contains(plain, "claude:レビュー") {
-		t.Errorf("sessionSummary(plain) = %q; want both labeled sessions", plain)
+	plain := sessionDisplayName(tk.AgentSessions[0], false)
+	if plain != "↗ codex:公開準備" {
+		t.Errorf("sessionDisplayName(plain) = %q; want labeled Codex session", plain)
 	}
 
-	linked := sessionSummary(tk, true)
+	linked := sessionDisplayName(tk.AgentSessions[0], true)
 	if !strings.Contains(linked, "codex://threads/01900000-0000-7000-8000-000000000001") {
-		t.Errorf("sessionSummary(linked) = %q; want Codex deep link", linked)
+		t.Errorf("sessionDisplayName(linked) = %q; want Codex deep link", linked)
 	}
 
-	commands := claudeResumeCommands(tk)
+	command, ok := claudeResumeCommand(tk, tk.AgentSessions[1])
 	wantCommand := "everes session open " + task.ShortID(tk.TaskID) + " --provider claude --session-id claude-1"
-	if len(commands) != 1 || commands[0].Command != wantCommand || commands[0].Label != "レビュー" {
-		t.Errorf("claudeResumeCommands() = %#v; want labeled command %q", commands, wantCommand)
+	if !ok || command.Command != wantCommand || command.Label != "レビュー" {
+		t.Errorf("claudeResumeCommand() = %#v, %v; want labeled command %q", command, ok, wantCommand)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestRenderListShowsSessionStatusesAndSessionCheck(t *testing.T) {
 	var out bytes.Buffer
 	renderList(&out, []*task.Task{tk}, now)
 	got := out.String()
-	for _, want := range []string{"WAITING — CHECK NOW", "執筆 [waiting]", "1 waiting", "公開日を決める"} {
+	for _, want := range []string{"WAITING — CHECK NOW", "│  Task  WAITING (1 session)", "├─ Sessions", "│  └─ WAITING  ↗ codex:執筆", "確認時刻超過", "公開日を決める", "╰─"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("rendered list = %q; want %q", got, want)
 		}

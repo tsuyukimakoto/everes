@@ -315,7 +315,7 @@ Taskの目的達成済み。
 3. activeとneeds_meがなくwaitingがあればTaskはwaiting
 4. pausedだけが残ればTaskはpaused
 
-v1から移行しstatusが未設定のsessionは集約から除外し、providerの実行状態やlast_seen_atから推測しない。全sessionがdoneでもTaskは自動でdoneにしない。`task done`だけがTaskをdoneにし、そのとき全Agent Sessionをdoneにする。
+v1から移行しstatusが未設定のsessionは `NOT_SET` と表示して集約から除外し、providerの実行状態やlast_seen_atから推測しない。`NOT_SET` はstatus enumには含めない。全sessionがdoneでもTaskは自動でdoneにしない。`task done`だけがTaskをdoneにし、そのとき全Agent Sessionをdoneにする。
 
 ---
 
@@ -765,7 +765,7 @@ everes session current --json
 
 `task list` はdoneを既定で隠す。一覧は「いま抱えている作業」を映す面とするためである。
 
-一のTaskに複数のAgent Sessionが紐づいても、`task list` ではTaskを一つのまま表示する。providerごとのsession数は `[codex×2,claude]` のように示し、個別のsessionはlabel付きで同じTask内に並べる。Codex sessionは対応ターミナル上で `codex://threads/<thread-id>` へのリンクとする。Claude sessionはClaude Code CLIで再開する完全な `everes session open` コマンドを表示する。保存状態などの詳細は `task show` または `session list` で確認する。
+一つのTaskに複数のAgent Sessionが紐づいても、`task list` ではTaskを一つのまま表示する。TaskにはAgent Sessionから集約したstatusとsession数を表示し、その下に個別のsessionを階層表示する。各sessionの行にはstatus、provider、label、summary、next actionまたはresume when、確認予定をまとめる。Codex sessionは対応ターミナル上で `codex://threads/<thread-id>` へのリンクとする。Claude sessionはClaude Code CLIで再開する完全な `everes session open` コマンドを表示する。session IDや保存状態などの詳細は `task show` または `session list` で確認する。
 
 flagは位置引数の後ろに書いても解釈する。Skillが生成するコマンドで語順に気を遣わせないためである。
 
@@ -841,27 +841,38 @@ statusごとにグルーピングし、`needs_me` から順に並べる。人間
 ```text
 NEEDS ME
 
-認証API変更
-レビュー指摘への対応が必要
-→ 指摘内容を確認して修正
-GitHub #381
-12 min ago
+╭─ 01K2N86E2AS3  認証API変更
+│  Task  NEEDS ME (2 sessions) · 12 min ago
+│  現在地  レビュー指摘への対応が必要
+│  次の作業  指摘内容を確認して修正する
+│  GitHub #381
+├─ Sessions
+│  ├─ NEEDS_ME codex:修正 — 現在地: 指摘内容を確認中 / 次の作業: 修正してテストする
+│  └─ DONE     claude:調査 — 現在地: 影響範囲の確認完了
+╰─
 
 
 WAITING
 
-通知基盤変更
-API仕様確定待ち
-→ Issue #422が確定したら再開
-2 days ago
+╭─ 01K2N86E2BT4  通知基盤変更
+│  Task  WAITING (1 session) · 2 days ago
+│  現在地  API仕様確定待ち
+│  再開条件  Issue #422が確定したら
+├─ Sessions
+│  └─ WAITING  codex:実装 — 現在地: API案を作成済み / 再開条件: Issue #422が確定したら再開
+╰─
 
 
 ACTIVE
 
-動画export高速化
-Metal encoder周辺を調査中
-→ Instrumentsでボトルネック確認
-34 min ago
+╭─ 01K2N86E2CU5  動画export高速化
+│  Task  ACTIVE (2 sessions) · 34 min ago
+│  現在地  Metal encoder周辺を調査中
+│  次の作業  Instrumentsでボトルネックを確認する
+├─ Sessions
+│  ├─ ACTIVE   codex:計測 — 現在地: encoderを計測中 / 次の作業: ボトルネックを特定する
+│  └─ PAUSED   claude:資料調査 — 現在地: 関連資料を整理済み
+╰─
 ```
 
 一覧で最低限表示する:
@@ -873,13 +884,14 @@ status
 summary
 resume_when または next_action
 references
-provider
+session数
+sessionごとのstatus、provider、label、summary、next_actionまたはresume_when、確認予定
 updated_at
 ```
 
 短縮task-idを出すのは、続く操作でTaskを指定する必要があるためである。
 
-`resume_when` と `next_action` はどちらか一方を出す。`waiting` では `resume_when` を、それ以外では `next_action` を優先する。何待ちなのかが最も知りたい情報だからである。
+Taskの `resume_when` と `next_action` はどちらか一方を出す。`waiting` では `resume_when` を、それ以外では `next_action` を優先する。Agent Sessionにも同じ規則を適用し、statusとその根拠になる現在地を一つの行で読めるようにする。
 
 ---
 

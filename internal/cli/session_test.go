@@ -7,6 +7,12 @@ import (
 	"github.com/tsuyukimakoto/everes/internal/task"
 )
 
+func TestDisplaySessionStatusUsesNotSetForMissingStatus(t *testing.T) {
+	if got := displaySessionStatus(""); got != "not_set" {
+		t.Errorf("displaySessionStatus(empty) = %q; want %q", got, "not_set")
+	}
+}
+
 func TestCollectSessionStatesKeepsUnavailableProvider(t *testing.T) {
 	tk, err := task.New("セッション連携")
 	if err != nil {

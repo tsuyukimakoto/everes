@@ -482,7 +482,7 @@ func findAttachedSession(t *task.Task, providerName, sessionID string) *task.Age
 
 func displaySessionStatus(status task.Status) string {
 	if status == "" {
-		return "untracked"
+		return "not_set"
 	}
 	return string(status)
 }

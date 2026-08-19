@@ -226,8 +226,8 @@ AIエージェントはそのメッセージの依頼を進める前にTaskを�
 
 AIエージェントは既存Taskを特定し、新しいAgent Sessionを追加します。
 以前のAgent Sessionは削除されないため、一つのTaskから複数のconversationを確認できます。
-`everes task list`ではTaskは一つのままで、末尾のprovider表示が `[codex×2]` や `[codex×2,claude]` のようにsession数を示します。
-Taskの下には `sessions: ↗ codex:<label>` の形で個々のsessionも表示します。リンク対応ターミナルで `↗ codex:<label>` を選択すると、`codex://threads/<thread-id>` が開き、Codexアプリの該当taskへ移動します。
+`everes task list`ではTaskごとに枠を分け、Taskの集約statusとsession数を表示し、その下に各sessionを一行ずつ並べます。
+各sessionの行にはstatus、provider、label、summary、next actionまたはresume when、確認予定をまとめて表示します。リンク対応ターミナルで `↗ codex:<label>` を選択すると、`codex://threads/<thread-id>` が開き、Codexアプリの該当taskへ移動します。
 Claude sessionの下には `everes session open ... --provider claude --session-id ...` を表示します。コマンドを選択・コピーして実行すると、該当sessionをClaude Code CLIで再開します。ターミナルのリンクには、選択時に文字列をクリップボードへコピーする共通のURL schemeがないため、コピーリンクではなく実行可能なコマンドを表示します。
 sessionごとのID、label、保存状態は `everes session list <task-id>` で確認します。
 
@@ -300,6 +300,8 @@ statusはAgent Sessionへ注意を戻す条件を表します。Taskのstatusは
 | `needs_me` | AIエージェントでは進められず、人間の判断や操作が必要 | 最初に表示されます |
 | `paused` | 外部要因待ちではなく、意図的に止めている | `active` より後に表示されます |
 | `done` | Taskの目的を達成した | 通常の一覧では非表示になります |
+
+`NOT_SET` はstatusの種類ではなく、Taskとの紐付けはあるものの、そのAgent Sessionにstatusが記録されていないことを示す表示です。statusが未設定の旧データで表示され、Task statusの集約からは除外されます。
 
 ## CLIでTaskを横断して確認する
 
