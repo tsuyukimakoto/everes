@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/tsuyukimakoto/everes/internal/store"
@@ -20,7 +21,7 @@ import (
 	_ "github.com/tsuyukimakoto/everes/internal/provider/codex"
 )
 
-// Version はビルド時に -ldflags で差し替える。
+// Version はリポジトリ内のビルド時に -ldflags で差し替える。
 var Version = "dev"
 
 const usage = `everes - 並行するAIコーディング作業のTask Context Manager
@@ -96,7 +97,7 @@ func dispatch(args []string) error {
 		// 利用頻度が高いためaliasを設けている。
 		return runSessionCurrent(rest)
 	case "version", "--version", "-v":
-		fmt.Println(Version)
+		fmt.Println(currentVersion())
 		return nil
 	case "help", "-h", "--help":
 		fmt.Print(usage)
@@ -104,6 +105,24 @@ func dispatch(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", cmd, usage)
 	}
+}
+
+func currentVersion() string {
+	moduleVersion := ""
+	if info, ok := debug.ReadBuildInfo(); ok {
+		moduleVersion = info.Main.Version
+	}
+	return resolveVersion(Version, moduleVersion)
+}
+
+func resolveVersion(linkedVersion, moduleVersion string) string {
+	if linkedVersion != "" && linkedVersion != "dev" {
+		return linkedVersion
+	}
+	if moduleVersion != "" && moduleVersion != "(devel)" {
+		return moduleVersion
+	}
+	return "dev"
 }
 
 // openStore はデータディレクトリを開く。

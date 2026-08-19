@@ -1,4 +1,7 @@
 name: everes-codex-hook
-version: 0.2.0
+version: "0.2.0"
 description: Everes SessionStart hook for Codex
-target: codex
+author: tsuyukimakoto
+license: MIT
+targets:
+  - codex

@@ -7,6 +7,28 @@ import (
 	"testing"
 )
 
+func TestCurrentVersionUsesLinkedVersion(t *testing.T) {
+	original := Version
+	Version = "0.2.0"
+	t.Cleanup(func() { Version = original })
+
+	if got := currentVersion(); got != "0.2.0" {
+		t.Fatalf("currentVersion() = %q, want %q", got, "0.2.0")
+	}
+}
+
+func TestResolveVersionUsesGoModuleVersion(t *testing.T) {
+	if got := resolveVersion("dev", "v0.0.0-20260819234055-57f0dfd88636"); got != "v0.0.0-20260819234055-57f0dfd88636" {
+		t.Fatalf("resolveVersion() = %q", got)
+	}
+}
+
+func TestResolveVersionFallsBackToDev(t *testing.T) {
+	if got := resolveVersion("dev", "(devel)"); got != "dev" {
+		t.Fatalf("resolveVersion() = %q, want %q", got, "dev")
+	}
+}
+
 // TestReorderArgs はフラグを位置引数の後ろに書いても解釈できることを確認する。
 //
 // 標準のflagは最初の非フラグ引数でパースを止めるため、

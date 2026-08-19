@@ -25,31 +25,46 @@ conversationが長くなって新しいsessionへ引き継いでも、Taskは変
 
 ## 導入
 
-CLI本体をビルドして配置します。
+Go 1.26以降とapmが必要です。
+apmがない場合は、先に[APM公式の導入手順](https://microsoft.github.io/apm/getting-started/installation/)でインストールしてください。
+
+CLI本体と、Claude Code / Codex用のSkillとhookをインストールします。
+
+```bash
+GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@main
+apm install -g tsuyukimakoto/everes#main --target claude,codex
+```
+
+`~/bin` が `PATH` にない場合は、利用中のシェルの設定に追加してください。導入を確認します。
+
+```bash
+everes version
+apm view -g tsuyukimakoto/everes
+```
+
+APMパッケージは、共通SkillとClaude Code / CodexそれぞれのSessionStart hookを一度に導入します。Skillは `~/.agents/skills/`、hookは各エージェントのユーザー設定に配置されます。
+
+### 更新
+
+CLI本体とAPMパッケージを更新します。
+
+```bash
+GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@main
+apm update -g tsuyukimakoto/everes --target claude,codex --yes
+```
+
+更新後に `everes version` と `apm view -g tsuyukimakoto/everes` を実行し、CLIとAPMパッケージのバージョンを確認してください。
+
+### リポジトリから開発用に導入
+
+このリポジトリをcloneしている場合は、CLIをビルドし、現在のソースからAPMパッケージを導入できます。
 
 ```bash
 mise run install
-```
-
-Skillとhookをapmで配布します。Claude Codeへは `~/.claude/`、Codexへは `~/.agents/` と `~/.codex/` に配置されます。
-
-apmがない場合は、先に[公式の導入手順](https://microsoft.github.io/apm/getting-started/installation/)でインストールしてください。
-
-```bash
 mise run deploy
 ```
 
-`mise run deploy` は次と同じです。
-
-```bash
-apm install -g "$(pwd)" --target claude,codex
-apm install -g "$(pwd)/.apm/packages/everes-claude-hook" --target claude
-apm install -g "$(pwd)/.apm/packages/everes-codex-hook" --target codex
-```
-
-共通Skill、Claude用hook、Codex用hookを独立したローカルパッケージとして導入します。各hookパッケージは配布先と `--provider` の値を固定しています。
-
-`apm install -g` は各パッケージの絶対パスを `~/.apm/apm.yml` に記録します。リポジトリを移動した場合は再実行してください。
+`apm install -g` はリポジトリの絶対パスを `~/.apm/apm.yml` に記録します。リポジトリを移動した場合は `mise run deploy` を再実行してください。
 
 ### 開発中の導入
 

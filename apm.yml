@@ -1,6 +1,14 @@
 name: everes
-version: 0.2.0
+version: "0.2.0"
 description: 並行するAIコーディング作業のTask Context Manager
+author: tsuyukimakoto
+license: MIT
 targets:
   - claude
   - codex
+includes: auto
+dependencies:
+  apm:
+    - path: ./.apm/packages/everes-claude-hook
+    - path: ./.apm/packages/everes-codex-hook
+  mcp: []

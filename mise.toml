@@ -56,8 +56,6 @@ shell = "bash -c"
 run = '''
 set -euo pipefail
 apm install -g "$(pwd)" --target claude,codex
-apm install -g "$(pwd)/.apm/packages/everes-claude-hook" --target claude
-apm install -g "$(pwd)/.apm/packages/everes-codex-hook" --target codex
 '''
 
 [tasks.dev-link]
