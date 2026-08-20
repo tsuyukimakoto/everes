@@ -5,10 +5,13 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/tsuyukimakoto/everes/internal/provider"
 	"github.com/tsuyukimakoto/everes/internal/task"
 )
+
+const defaultListWidth = 100
 
 // renderList はstatusでグルーピングした一覧を書き出す。
 //
@@ -16,11 +19,16 @@ import (
 // 「何の作業か / 現在どうなっているか / 次に何をするか / 何待ちなのか」が
 // 読み取れることを目標とする。
 func renderList(w io.Writer, tasks []*task.Task, now time.Time) {
-	renderListWithLinks(w, tasks, now, false)
+	renderListWithWidth(w, tasks, now, false, defaultListWidth)
 }
 
 // renderListWithLinks はCodex deep linkの有無を指定してTask一覧を書き出す。
 func renderListWithLinks(w io.Writer, tasks []*task.Task, now time.Time, links bool) {
+	renderListWithWidth(w, tasks, now, links, defaultListWidth)
+}
+
+// renderListWithWidth はTerminalの表示幅を指定してTask一覧を書き出す。
+func renderListWithWidth(w io.Writer, tasks []*task.Task, now time.Time, links bool, width int) {
 	if len(tasks) == 0 {
 		fmt.Fprintln(w, "Taskがありません。everes task create で作成してください。")
 		return
@@ -38,49 +46,59 @@ func renderListWithLinks(w io.Writer, tasks []*task.Task, now time.Time, links b
 			current = group
 			first = false
 		}
-		renderListItem(w, t, now, links)
+		renderListItem(w, t, now, links, width)
 		fmt.Fprintln(w)
 	}
 }
 
-func renderListItem(w io.Writer, t *task.Task, now time.Time, links bool) {
+func renderListItem(w io.Writer, t *task.Task, now time.Time, links bool, width int) {
 	fmt.Fprintf(w, "╭─ %s  %s\n", task.ShortID(t.TaskID), t.Title)
 	fmt.Fprintf(w, "│  Task  %s (%s) · %s\n",
 		t.Status.Label(), sessionCountLabel(len(t.AgentSessions)), relTime(t.Timestamps.UpdatedAt, now))
 
-	if t.Summary != "" {
-		fmt.Fprintf(w, "│  現在地  %s\n", t.Summary)
-	}
-
-	if t.CheckAt != nil {
-		when := formatCheckAt(*t.CheckAt, now.Location())
-		if t.CheckDue(now) {
-			fmt.Fprintf(w, "│  ! 確認時刻超過 (%s): %s\n", when, t.CheckAction)
-		} else {
-			fmt.Fprintf(w, "│  確認予定 %s: %s\n", when, t.CheckAction)
-		}
-	}
-
-	// waitingではresume_whenが、それ以外ではnext_actionが最も知りたい情報になる。
-	if label, hint := listHint(t); hint != "" {
-		fmt.Fprintf(w, "│  %s  %s\n", label, hint)
-	}
-
-	if refs := refSummary(t); refs != "" {
-		fmt.Fprintf(w, "│  %s\n", refs)
+	fields := taskListFields(t, now)
+	for _, field := range fields {
+		fmt.Fprintln(w, "│")
+		writeStagedField(w, "│  ", "│    ", field, width)
 	}
 
 	if len(t.AgentSessions) > 0 {
 		fmt.Fprintln(w, "├─ Sessions")
-		for i, attached := range t.AgentSessions {
-			branch := "├─"
-			if i == len(t.AgentSessions)-1 {
-				branch = "└─"
-			}
-			renderSessionListItem(w, t, attached, branch, now, links)
+		for _, attached := range t.AgentSessions {
+			fmt.Fprintln(w, "│")
+			renderSessionListItem(w, t, attached, now, links, width)
 		}
 	}
 	fmt.Fprintln(w, "╰─")
+}
+
+type listField struct {
+	Label string
+	Value string
+}
+
+func taskListFields(t *task.Task, now time.Time) []listField {
+	var fields []listField
+	if t.Summary != "" {
+		fields = append(fields, listField{Label: "現在地", Value: t.Summary})
+	}
+	if label, hint := listHint(t); hint != "" {
+		fields = append(fields, listField{Label: label, Value: hint})
+	}
+	if t.CheckAt != nil {
+		label := "確認予定"
+		if t.CheckDue(now) {
+			label = "! 確認時刻超過"
+		}
+		fields = append(fields, listField{
+			Label: label,
+			Value: formatCheckAt(*t.CheckAt, now.Location()) + ": " + t.CheckAction,
+		})
+	}
+	if refs := refSummary(t); refs != "" {
+		fields = append(fields, listField{Label: "参照", Value: refs})
+	}
+	return fields
 }
 
 func sessionCountLabel(count int) string {
@@ -94,20 +112,55 @@ func sessionCountLabel(count int) string {
 	}
 }
 
-func renderSessionListItem(w io.Writer, t *task.Task, attached task.AgentSession, branch string, now time.Time, links bool) {
+func renderSessionListItem(w io.Writer, t *task.Task, attached task.AgentSession, now time.Time, links bool, width int) {
 	status := strings.ToUpper(displaySessionStatus(attached.Status))
 	name := sessionDisplayName(attached, links)
-	activity := sessionActivity(attached, now)
+	fmt.Fprintf(w, "│  ┌─ %s  %s\n", status, name)
 
-	fmt.Fprintf(w, "│  %s %-8s %s", branch, status, name)
-	if activity != "" {
-		fmt.Fprintf(w, " — %s", activity)
-	}
-	fmt.Fprintln(w)
-
+	fields := sessionListFields(attached, now)
 	if resume, ok := claudeResumeCommand(t, attached); ok {
-		fmt.Fprintf(w, "│     再開: %s\n", resume.Command)
+		fields = append(fields, listField{Label: "再開", Value: resume.Command})
 	}
+	for i, field := range fields {
+		if i > 0 {
+			fmt.Fprintln(w, "│  │")
+		}
+		writeStagedField(w, "│  │  ", "│  │    ", field, width)
+	}
+	fmt.Fprintln(w, "│  └─")
+}
+
+func sessionListFields(attached task.AgentSession, now time.Time) []listField {
+	var fields []listField
+	if attached.Status == "" {
+		fields = append(fields, listField{Label: "状態", Value: "status未設定"})
+	}
+	if attached.Summary != "" {
+		fields = append(fields, listField{Label: "現在地", Value: attached.Summary})
+	}
+	switch attached.Status {
+	case task.StatusWaiting, task.StatusPaused:
+		if attached.ResumeWhen != "" {
+			fields = append(fields, listField{Label: "再開条件", Value: attached.ResumeWhen})
+		} else if attached.NextAction != "" {
+			fields = append(fields, listField{Label: "次の作業", Value: attached.NextAction})
+		}
+	default:
+		if attached.NextAction != "" {
+			fields = append(fields, listField{Label: "次の作業", Value: attached.NextAction})
+		}
+	}
+	if attached.CheckAt != nil {
+		label := "確認予定"
+		if attached.CheckDue(now) {
+			label = "! 確認時刻超過"
+		}
+		fields = append(fields, listField{
+			Label: label,
+			Value: formatCheckAt(*attached.CheckAt, now.Location()) + ": " + attached.CheckAction,
+		})
+	}
+	return fields
 }
 
 func sessionDisplayName(attached task.AgentSession, links bool) string {
@@ -130,54 +183,6 @@ func sessionDisplayName(attached task.AgentSession, links bool) string {
 		return terminalLink(appURL, text)
 	}
 	return text
-}
-
-func sessionActivity(attached task.AgentSession, now time.Time) string {
-	var activity string
-	if attached.Summary != "" {
-		activity = "現在地: " + sanitizeTerminalText(attached.Summary)
-	}
-
-	action := ""
-	switch attached.Status {
-	case task.StatusWaiting:
-		if attached.ResumeWhen != "" {
-			action = "再開条件: " + sanitizeTerminalText(attached.ResumeWhen)
-		} else if attached.NextAction != "" {
-			action = "次の作業: " + sanitizeTerminalText(attached.NextAction)
-		}
-	case task.StatusPaused:
-		if attached.ResumeWhen != "" {
-			action = "再開条件: " + sanitizeTerminalText(attached.ResumeWhen)
-		} else if attached.NextAction != "" {
-			action = "次の作業: " + sanitizeTerminalText(attached.NextAction)
-		}
-	default:
-		if attached.NextAction != "" {
-			action = "次の作業: " + sanitizeTerminalText(attached.NextAction)
-		}
-	}
-	activity = joinActivity(activity, action)
-
-	if attached.CheckAt != nil {
-		when := formatCheckAt(*attached.CheckAt, now.Location())
-		check := fmt.Sprintf("確認予定: %s — %s", when, sanitizeTerminalText(attached.CheckAction))
-		if attached.CheckDue(now) {
-			check = fmt.Sprintf("! 確認時刻超過 (%s): %s", when, sanitizeTerminalText(attached.CheckAction))
-		}
-		activity = joinActivity(activity, check)
-	}
-	return activity
-}
-
-func joinActivity(current, next string) string {
-	if current == "" {
-		return next
-	}
-	if next == "" {
-		return current
-	}
-	return current + " / " + next
 }
 
 type sessionResumeCommand struct {
@@ -221,6 +226,84 @@ func sanitizeTerminalText(value string) string {
 		}
 		return r
 	}, value)
+}
+
+func writeStagedField(w io.Writer, labelPrefix, valuePrefix string, field listField, width int) {
+	fmt.Fprintf(w, "%s%s\n", labelPrefix, sanitizeTerminalText(field.Label))
+	available := width - terminalDisplayWidth(valuePrefix)
+	for _, line := range wrapTerminalText(sanitizeTerminalText(field.Value), available) {
+		fmt.Fprintf(w, "%s%s\n", valuePrefix, line)
+	}
+}
+
+func wrapTerminalText(value string, width int) []string {
+	if value == "" {
+		return []string{""}
+	}
+	if width < 1 {
+		width = 1
+	}
+	var lines []string
+	var line []rune
+	lineWidth := 0
+	for _, r := range value {
+		runeWidth := terminalRuneWidth(r)
+		if lineWidth > 0 && lineWidth+runeWidth > width {
+			if prohibitedAtLineStart(r) && len(line) > 1 {
+				last := line[len(line)-1]
+				line = line[:len(line)-1]
+				lines = append(lines, strings.TrimRight(string(line), " "))
+				line = []rune{last}
+				lineWidth = terminalRuneWidth(last)
+			} else {
+				lines = append(lines, strings.TrimRight(string(line), " "))
+				line = nil
+				lineWidth = 0
+			}
+		}
+		if lineWidth == 0 && unicode.IsSpace(r) {
+			continue
+		}
+		line = append(line, r)
+		lineWidth += runeWidth
+	}
+	if len(line) > 0 {
+		lines = append(lines, strings.TrimRight(string(line), " "))
+	}
+	if len(lines) == 0 {
+		return []string{""}
+	}
+	return lines
+}
+
+func prohibitedAtLineStart(r rune) bool {
+	return strings.ContainsRune("、。，．・：；？！ー〜～…‥）〕］｝〉》」』】〙〗〟’”ゝゞヽヾ々", r)
+}
+
+func terminalDisplayWidth(value string) int {
+	width := 0
+	for _, r := range value {
+		width += terminalRuneWidth(r)
+	}
+	return width
+}
+
+func terminalRuneWidth(r rune) int {
+	if r == 0 || unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) || unicode.Is(unicode.Cf, r) {
+		return 0
+	}
+	if r < 0x20 || (r >= 0x7f && r < 0xa0) {
+		return 0
+	}
+	if r >= 0x1100 && (r <= 0x115f || r == 0x2329 || r == 0x232a ||
+		(r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) ||
+		(r >= 0xac00 && r <= 0xd7a3) || (r >= 0xf900 && r <= 0xfaff) ||
+		(r >= 0xfe10 && r <= 0xfe19) || (r >= 0xfe30 && r <= 0xfe6f) ||
+		(r >= 0xff00 && r <= 0xff60) || (r >= 0xffe0 && r <= 0xffe6) ||
+		(r >= 0x1f300 && r <= 0x1faff) || (r >= 0x20000 && r <= 0x3fffd)) {
+		return 2
+	}
+	return 1
 }
 
 func shortSessionID(id string) string {

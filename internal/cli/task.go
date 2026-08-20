@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/tsuyukimakoto/everes/internal/provider"
@@ -180,13 +181,33 @@ func runTaskList(args []string) error {
 		return writeJSON(os.Stdout, tasks)
 	}
 
-	renderListWithLinks(os.Stdout, tasks, time.Now(), stdoutIsTerminal())
+	renderListWithWidth(os.Stdout, tasks, time.Now(), stdoutIsTerminal(), listTerminalWidth())
 	return nil
 }
 
 func stdoutIsTerminal() bool {
 	info, err := os.Stdout.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func listTerminalWidth() int {
+	if columns := os.Getenv("COLUMNS"); columns != "" {
+		var width int
+		if _, err := fmt.Sscanf(columns, "%d", &width); err == nil && width >= 20 {
+			return width
+		}
+	}
+	if stdoutIsTerminal() {
+		cmd := exec.Command("stty", "size")
+		cmd.Stdin = os.Stdin
+		if out, err := cmd.Output(); err == nil {
+			var rows, width int
+			if _, err := fmt.Sscanf(string(out), "%d %d", &rows, &width); err == nil && width >= 20 {
+				return width
+			}
+		}
+	}
+	return defaultListWidth
 }
 
 func runTaskShow(args []string) error {

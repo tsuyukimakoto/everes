@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+func TestListTerminalWidthUsesColumns(t *testing.T) {
+	t.Setenv("COLUMNS", "72")
+	if got := listTerminalWidth(); got != 72 {
+		t.Errorf("listTerminalWidth() = %d; want 72", got)
+	}
+}
+
 func TestCurrentVersionUsesLinkedVersion(t *testing.T) {
 	original := Version
 	Version = "0.2.0"

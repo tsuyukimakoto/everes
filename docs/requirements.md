@@ -843,12 +843,29 @@ NEEDS ME
 
 ╭─ 01K2N86E2AS3  認証API変更
 │  Task  NEEDS ME (2 sessions) · 12 min ago
-│  現在地  レビュー指摘への対応が必要
-│  次の作業  指摘内容を確認して修正する
-│  GitHub #381
+│
+│  現在地
+│    レビュー指摘への対応が必要
+│
+│  次の作業
+│    指摘内容を確認して修正する
+│
+│  参照
+│    GitHub #381
 ├─ Sessions
-│  ├─ NEEDS_ME codex:修正 — 現在地: 指摘内容を確認中 / 次の作業: 修正してテストする
-│  └─ DONE     claude:調査 — 現在地: 影響範囲の確認完了
+│
+│  ┌─ NEEDS_ME  codex:修正
+│  │  現在地
+│  │    指摘内容を確認中
+│  │
+│  │  次の作業
+│  │    修正してテストする
+│  └─
+│
+│  ┌─ DONE  claude:調査
+│  │  現在地
+│  │    影響範囲の確認完了
+│  └─
 ╰─
 
 
@@ -856,10 +873,21 @@ WAITING
 
 ╭─ 01K2N86E2BT4  通知基盤変更
 │  Task  WAITING (1 session) · 2 days ago
-│  現在地  API仕様確定待ち
-│  再開条件  Issue #422が確定したら
+│
+│  現在地
+│    API仕様確定待ち
+│
+│  再開条件
+│    Issue #422が確定したら
 ├─ Sessions
-│  └─ WAITING  codex:実装 — 現在地: API案を作成済み / 再開条件: Issue #422が確定したら再開
+│
+│  ┌─ WAITING  codex:実装
+│  │  現在地
+│  │    API案を作成済み
+│  │
+│  │  再開条件
+│  │    Issue #422が確定したら再開
+│  └─
 ╰─
 
 
@@ -867,11 +895,26 @@ ACTIVE
 
 ╭─ 01K2N86E2CU5  動画export高速化
 │  Task  ACTIVE (2 sessions) · 34 min ago
-│  現在地  Metal encoder周辺を調査中
-│  次の作業  Instrumentsでボトルネックを確認する
+│
+│  現在地
+│    Metal encoder周辺を調査中
+│
+│  次の作業
+│    Instrumentsでボトルネックを確認する
 ├─ Sessions
-│  ├─ ACTIVE   codex:計測 — 現在地: encoderを計測中 / 次の作業: ボトルネックを特定する
-│  └─ PAUSED   claude:資料調査 — 現在地: 関連資料を整理済み
+│
+│  ┌─ ACTIVE  codex:計測
+│  │  現在地
+│  │    encoderを計測中
+│  │
+│  │  次の作業
+│  │    ボトルネックを特定する
+│  └─
+│
+│  ┌─ PAUSED  claude:資料調査
+│  │  現在地
+│  │    関連資料を整理済み
+│  └─
 ╰─
 ```
 
@@ -891,7 +934,7 @@ updated_at
 
 短縮task-idを出すのは、続く操作でTaskを指定する必要があるためである。
 
-Taskの `resume_when` と `next_action` はどちらか一方を出す。`waiting` では `resume_when` を、それ以外では `next_action` を優先する。Agent Sessionにも同じ規則を適用し、statusとその根拠になる現在地を一つの行で読めるようにする。
+Taskの `resume_when` と `next_action` はどちらか一方を出す。`waiting` では `resume_when` を、それ以外では `next_action` を優先する。Agent Sessionにも同じ規則を適用する。statusとsession名は見出しに置き、summary、next_action、resume_when、確認予定は項目ごとの段に分ける。本文はTerminal幅に合わせて折り返し、継続行を同じ項目のインデントへ揃える。
 
 ---
 

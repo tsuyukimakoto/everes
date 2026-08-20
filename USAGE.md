@@ -226,8 +226,8 @@ AIエージェントはそのメッセージの依頼を進める前にTaskを�
 
 AIエージェントは既存Taskを特定し、新しいAgent Sessionを追加します。
 以前のAgent Sessionは削除されないため、一つのTaskから複数のconversationを確認できます。
-`everes task list`ではTaskごとに枠を分け、Taskの集約statusとsession数を表示し、その下に各sessionを一行ずつ並べます。
-各sessionの行にはstatus、provider、label、summary、next actionまたはresume when、確認予定をまとめて表示します。リンク対応ターミナルで `↗ codex:<label>` を選択すると、`codex://threads/<thread-id>` が開き、Codexアプリの該当taskへ移動します。
+`everes task list`ではTaskごとに枠を分け、Taskの集約statusとsession数を表示し、その下に各sessionを段組みで並べます。
+各sessionはstatus、provider、labelを見出しにし、summary、next actionまたはresume when、確認予定を項目ごとの行へ分けます。長い本文はTerminal幅に合わせて同じ項目内で折り返します。リンク対応ターミナルで `↗ codex:<label>` を選択すると、`codex://threads/<thread-id>` が開き、Codexアプリの該当taskへ移動します。
 Claude sessionの下には `everes session open ... --provider claude --session-id ...` を表示します。コマンドを選択・コピーして実行すると、該当sessionをClaude Code CLIで再開します。ターミナルのリンクには、選択時に文字列をクリップボードへコピーする共通のURL schemeがないため、コピーリンクではなく実行可能なコマンドを表示します。
 sessionごとのID、label、保存状態は `everes session list <task-id>` で確認します。
 

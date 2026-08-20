@@ -104,7 +104,7 @@ func TestRenderListShowsSessionStatusesAndSessionCheck(t *testing.T) {
 	var out bytes.Buffer
 	renderList(&out, []*task.Task{tk}, now)
 	got := out.String()
-	for _, want := range []string{"WAITING — CHECK NOW", "│  Task  WAITING (1 session)", "├─ Sessions", "│  └─ WAITING  ↗ codex:執筆", "確認時刻超過", "公開日を決める", "╰─"} {
+	for _, want := range []string{"WAITING — CHECK NOW", "│  Task  WAITING (1 session)", "├─ Sessions", "│  ┌─ WAITING  ↗ codex:執筆", "確認時刻超過", "公開日を決める", "╰─"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("rendered list = %q; want %q", got, want)
 		}
