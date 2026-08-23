@@ -25,16 +25,17 @@ conversationが長くなって新しいsessionへ引き継いでも、Taskは変
 
 ## 導入
 
-Go 1.26以降とapmが必要です。
+apmとcurlが必要です。CLIはdarwin/arm64向けのprebuilt binaryとして配布されるため、Go toolchainは不要です。
 apmがない場合は、先に[APM公式の導入手順](https://microsoft.github.io/apm/getting-started/installation/)でインストールしてください。
 
-CLI本体と、Claude Code / Codex用のSkillとhookをインストールします。
+CLI本体と、Claude Code / Codex用のSkillとhookを同じrelease tagからインストールします。
 
 ```bash
-GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@main
-apm install -g tsuyukimakoto/everes#main --target claude,codex
-apm install -g "tsuyukimakoto/everes/.apm/packages/everes-claude-hook#main" --target claude
-apm install -g "tsuyukimakoto/everes/.apm/packages/everes-codex-hook#main" --target codex
+EVERES_VERSION=v0.2.0
+curl -fsSL "https://raw.githubusercontent.com/tsuyukimakoto/everes/${EVERES_VERSION}/install.sh" | bash -s -- "$EVERES_VERSION"
+apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
+apm install -g "tsuyukimakoto/everes/.apm/packages/everes-claude-hook#${EVERES_VERSION}" --target claude
+apm install -g "tsuyukimakoto/everes/.apm/packages/everes-codex-hook#${EVERES_VERSION}" --target codex
 ```
 
 `~/bin` が `PATH` にない場合は、利用中のシェルの設定に追加してください。導入を確認します。
@@ -48,16 +49,23 @@ APMパッケージは共通SkillとClaude Code / CodexそれぞれのSessionStar
 
 ### 更新
 
-CLI本体とAPMパッケージを更新します。
+`EVERES_VERSION`を更新先のrelease tagにして、CLI本体とAPMパッケージを更新します。
 
 ```bash
-GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@main
-apm install -g tsuyukimakoto/everes#main --target claude,codex
-apm install -g "tsuyukimakoto/everes/.apm/packages/everes-claude-hook#main" --target claude
-apm install -g "tsuyukimakoto/everes/.apm/packages/everes-codex-hook#main" --target codex
+EVERES_VERSION=v0.2.1
+curl -fsSL "https://raw.githubusercontent.com/tsuyukimakoto/everes/${EVERES_VERSION}/install.sh" | bash -s -- "$EVERES_VERSION"
+apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
+apm install -g "tsuyukimakoto/everes/.apm/packages/everes-claude-hook#${EVERES_VERSION}" --target claude
+apm install -g "tsuyukimakoto/everes/.apm/packages/everes-codex-hook#${EVERES_VERSION}" --target codex
 ```
 
 更新後に `everes version` と `apm view -g tsuyukimakoto/everes` を実行し、CLIとAPMパッケージのバージョンを確認してください。
+
+Go moduleとして導入する場合は、Go 1.26以降を用意してrelease tagを指定します。
+
+```bash
+GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@v0.2.0
+```
 
 ### リポジトリから開発用に導入
 
