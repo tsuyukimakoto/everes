@@ -55,7 +55,11 @@ description = "apm で Skill と hook を Claude / Codex へ配布"
 shell = "bash -c"
 run = '''
 set -euo pipefail
+# root は Skill のみ。hook は配置先（claude/codex）ごとに別パッケージ・別 target で導入する。
+# --target は依存グラフ全体に適用されるため、1コマンドにまとめると両配置先に二重登録される。
 apm install -g "$(pwd)" --target claude,codex
+apm install -g "$(pwd)/.apm/packages/everes-claude-hook" --target claude
+apm install -g "$(pwd)/.apm/packages/everes-codex-hook" --target codex
 '''
 
 [tasks.dev-link]

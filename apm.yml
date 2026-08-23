@@ -7,8 +7,10 @@ targets:
   - claude
   - codex
 includes: auto
+# hook は配置先ごとに別パッケージ（.apm/packages/everes-*-hook）として独立させ、
+# deploy で target ごとに個別 install する。root の dependencies にまとめると
+# --target が依存グラフ全体に適用され各パッケージの targets: を上書きし、
+# 両方の配置先に二重登録される（apm は --target > apm.yml targets: の優先）。
 dependencies:
-  apm:
-    - path: ./.apm/packages/everes-claude-hook
-    - path: ./.apm/packages/everes-codex-hook
+  apm: []
   mcp: []

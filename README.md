@@ -33,6 +33,8 @@ CLI本体と、Claude Code / Codex用のSkillとhookをインストールしま�
 ```bash
 GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@main
 apm install -g tsuyukimakoto/everes#main --target claude,codex
+apm install -g "tsuyukimakoto/everes/.apm/packages/everes-claude-hook#main" --target claude
+apm install -g "tsuyukimakoto/everes/.apm/packages/everes-codex-hook#main" --target codex
 ```
 
 `~/bin` が `PATH` にない場合は、利用中のシェルの設定に追加してください。導入を確認します。
@@ -42,7 +44,7 @@ everes version
 apm view -g tsuyukimakoto/everes
 ```
 
-APMパッケージは、共通SkillとClaude Code / CodexそれぞれのSessionStart hookを一度に導入します。Skillは `~/.agents/skills/`、hookは各エージェントのユーザー設定に配置されます。
+APMパッケージは共通SkillとClaude Code / CodexそれぞれのSessionStart hookを配布します。Skillは `~/.agents/skills/`、hookは各エージェントのユーザー設定に配置されます。hookは配置先ごとに別パッケージとして導入します。
 
 ### 更新
 
@@ -50,7 +52,9 @@ CLI本体とAPMパッケージを更新します。
 
 ```bash
 GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@main
-apm update -g tsuyukimakoto/everes --target claude,codex --yes
+apm install -g tsuyukimakoto/everes#main --target claude,codex
+apm install -g "tsuyukimakoto/everes/.apm/packages/everes-claude-hook#main" --target claude
+apm install -g "tsuyukimakoto/everes/.apm/packages/everes-codex-hook#main" --target codex
 ```
 
 更新後に `everes version` と `apm view -g tsuyukimakoto/everes` を実行し、CLIとAPMパッケージのバージョンを確認してください。
