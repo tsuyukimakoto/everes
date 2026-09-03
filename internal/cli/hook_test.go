@@ -80,7 +80,24 @@ func TestWriteTaskContextIncludesCurrentSessionStatus(t *testing.T) {
 	}
 }
 
-func TestWriteUnregisteredContextListsOnlyActiveTasksForSelection(t *testing.T) {
+func TestWriteTaskContextRemindsAgentToRefreshSnapshotAndConfirmStatus(t *testing.T) {
+	tk, _ := task.New("状態維持")
+	tk.AttachSession(task.AgentSession{Provider: "codex", SessionID: "current"})
+
+	var out bytes.Buffer
+	writeTaskContext(&out, tk, "codex", "current")
+	got := out.String()
+	for _, want := range []string{
+		"summaryとnext actionを現在地のsnapshotとして置き換えてください",
+		"statusを推測で変えず、変更するかユーザーに確認してください",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("context = %q; want %q", got, want)
+		}
+	}
+}
+
+func TestWriteUnregisteredContextListsAllUnfinishedTasksAndSelectionPolicy(t *testing.T) {
 	active, err := task.New("Everesを公開する")
 	if err != nil {
 		t.Fatalf("task.New() error = %v", err)
@@ -109,10 +126,19 @@ func TestWriteUnregisteredContextListsOnlyActiveTasksForSelection(t *testing.T) 
 
 	got := out.String()
 	for _, want := range []string{
-		"1. Everesを公開する",
+		"Everesを公開する",
+		"Status: active",
 		"Task ID: " + active.TaskID,
 		"Next Action: READMEを最終確認する",
-		"番号またはタイトル",
+		"レビュー結果を待つ",
+		"Status: waiting",
+		"Task ID: " + waiting.TaskID,
+		"最初のユーザーメッセージの依頼内容",
+		"推奨",
+		"既存の未完了Taskをすべて",
+		"作業を端的に表す新規Taskタイトルを1件提案",
+		"提案タイトルで新規Taskを作成",
+		"ユーザーが入力するタイトルで新規Taskを作成",
 		"どれにも紐付けない",
 		"everes session attach " + active.TaskID,
 		"--provider codex",
@@ -122,28 +148,38 @@ func TestWriteUnregisteredContextListsOnlyActiveTasksForSelection(t *testing.T) 
 			t.Errorf("context = %q; want it to contain %q", got, want)
 		}
 	}
-	for _, unwanted := range []string{waiting.Title, waiting.TaskID, done.Title, done.TaskID} {
+	for _, unwanted := range []string{done.Title, done.TaskID} {
 		if strings.Contains(got, unwanted) {
 			t.Errorf("context = %q; do not want it to contain %q", got, unwanted)
 		}
 	}
 }
 
-func TestWriteUnregisteredContextDoesNotAskWhenThereAreNoActiveTasks(t *testing.T) {
-	waiting, err := task.New("レビュー結果を待つ")
+func TestWriteUnregisteredContextAsksToCreateWhenThereAreNoUnfinishedTasks(t *testing.T) {
+	done, err := task.New("完了したTask")
 	if err != nil {
 		t.Fatalf("task.New() error = %v", err)
 	}
-	waiting.SetStatus(task.StatusWaiting)
+	done.SetStatus(task.StatusDone)
 
 	var out bytes.Buffer
-	writeUnregisteredContext(&out, "claude", "session-1", []*task.Task{waiting})
+	writeUnregisteredContext(&out, "claude", "session-1", []*task.Task{done})
 
 	got := out.String()
-	if strings.Contains(got, "番号またはタイトル") {
-		t.Errorf("context = %q; must not ask for a selection without active tasks", got)
+	for _, want := range []string{
+		"未完了Taskはありません",
+		"新しいTaskを作りますか",
+		"最初のユーザーメッセージの依頼内容",
+		"作業を端的に表す新規Taskタイトルを1件提案",
+		"提案タイトルで新規Taskを作成",
+		"ユーザーが入力するタイトルで新規Taskを作成",
+		"どれにも紐付けない",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("context = %q; want %q", got, want)
+		}
 	}
-	if !strings.Contains(got, "指示がない限りTaskを作成する必要はありません") {
-		t.Errorf("context = %q; want existing unregistered guidance", got)
+	if strings.Contains(got, done.Title) {
+		t.Errorf("context = %q; do not want completed task %q", got, done.Title)
 	}
 }

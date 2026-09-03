@@ -29,11 +29,13 @@ conversationが長くなって先頭の目的が流れても、Everesを見れ�
 
 必ず `everes` コマンドを経由してください。validation、排他制御、session mapping、schema migrationはすべてCLIが担っています。直接編集するとこれらが働かず、他のAgentとの同時更新でデータが壊れます。
 
-**指示されていないのに状態を更新してはいけません。**
+**statusを推測で変更してはいけません。現在地のsnapshotは古いままにしません。**
 
-conversationの内容から状態を推測して自動的に書き換えることは禁止です。誤判定、objectiveの意図しない変更、summaryの頻繁な揺れによって、人間が信頼できない管理情報になります。
+`status` の変更、Taskの完了、objectiveの変更は、ユーザーが明示した場合だけ実行します。ただし、別sessionへの委譲を始めたときや、このsessionの担当内容が終わったと判断したときは、作業を終える前に「このsessionを waiting / paused / done のどれにするか」を短く確認してください。状態変更の確認をせず、古い `active` のまま放置してはいけません。
 
-更新するのは、ユーザーが明示的に求めたときだけです。
+一方、すでにEveresで管理中のsessionについて、`summary` と `next_action` はconversationの現在地を示す置換可能なsnapshotです。実質的な進捗があった節目、別sessionへ委譲する前、長い作業の区切り、最終回答の前に内容が古くなっていれば、`everes session update` で更新してください。これは追記型の履歴ではありません。判断経緯や恒久的に残す情報だけをnoteに記録します。
+
+進捗がないのに文面だけを書き換えたり、毎ターン更新したりしてはいけません。wall clockによる定期実行はSkill単独では行えないため、「定期的」は意味のある作業区切りごとの更新として扱います。
 
 **「レビュー待ち」をEveres更新の合図にしてはいけません。**
 
@@ -59,9 +61,10 @@ SessionStart contextに次の形式でproviderとsession IDがある場合は、
 同じ作業ディレクトリで複数sessionを開いている場合、更新日時による自動検出では現在のsessionを区別できません。
 contextに値があるのに自動検出へ切り替えてはいけません。
 
-未登録sessionのSessionStart contextに `既存のActive Task候補` がある場合は、新しいsessionの最初の応答で通常の依頼を進める前に候補を番号とタイトルで提示し、どのTaskの続きかをユーザーに確認してください。
-選択肢には「どれにも紐付けない」を含め、Task IDの入力を求めてはいけません。
-ユーザーが選択した場合だけ、contextにある対応するTask ID、provider、session IDを使って `everes session attach` を実行します。
+未登録sessionのSessionStart contextを受け取った場合は、新しいsessionの最初の応答で通常の依頼を進める前に、Taskへ紐付けるかをユーザーに確認してください。
+最初のユーザーメッセージと未完了Task候補のtitle、objective、summary、next action、resume whenを比較し、明確に合う既存Taskがあれば1件を「推奨」と表示します。推奨以外も含め、未完了Taskはすべて選択肢に残してください。
+同じユーザーメッセージから作業を端的に表す新規Taskタイトルを1件提案し、「提案タイトルで新規Taskを作成」「ユーザーが入力するタイトルで新規Taskを作成」「どれにも紐付けない」を選択肢に含めます。未完了Taskがない場合は「新しいTaskを作りますか？」と確認し、この3つを提示してください。Task IDの入力を求めてはいけません。
+既存Taskが選択された場合だけ、contextにある対応するTask ID、provider、session IDを使って `everes session attach` を実行します。新規Taskが選択された場合だけ、提案したtitleまたはユーザーが入力したtitleで、現在のsessionへ紐づくTaskを作成します。
 選択前にTaskを作成、更新、紐付けしてはいけません。
 
 ## ユーザーの依頼と操作の対応
@@ -107,6 +110,27 @@ everes session update <task-id> \
 | `--resume-when` | いつこのTaskに戻ればよいか | PR #381 にレビューが付いたら |
 | `--check-at` | waitingを次に確認するローカル日時 | 2026-08-17 09:00 |
 | `--check-action` | その時刻を過ぎたら確認すること | PR #381のレビュー状況を確認する |
+
+この更新は過去の記録への追記ではなく、現在のAgent Sessionのsnapshotを置き換えます。`summary` には「このsessionが何を担当し、どこまで終わり、いまどうなっているか」を短く記述し、一覧だけで現在地を判断できるようにしてください。
+
+## 作業中のsnapshotとstatus確認
+
+Everesに紐づくsessionで作業している間は、次の節目で現在のsessionの `summary` と `next_action` がconversationと一致しているか確認します。
+
+- 検証が通る、実装方針が確定するなど、現在地が変わったとき
+- 別のAgent Sessionへ仕事を委譲する直前
+- 長い作業をいったん区切るとき
+- 最終回答を返す前
+
+古くなっていれば、statusは変えずに `everes session update` でsnapshotを置き換えます。更新内容には、完了したこと、残っていること、次に行う具体的な作業を含めます。
+
+次の場合はstatusを自動変更せず、その場でユーザーに短く確認します。
+
+- 別sessionへ委譲し、このsession側に実行中の作業が残っていない: `waiting`、`paused`、`done` のどれにするか
+- このsessionの担当内容を終えた: sessionを `done` にするか
+- Task全体の目的を達成した: Taskを `done` にするか
+
+ユーザーが同じ発言でstatusを指定している場合は、重ねて確認せず、その指定どおり更新します。
 
 ### 「このTaskをEveresでウェイティングにして」
 
@@ -226,7 +250,7 @@ Everesに独自のmailboxがあるかのように振る舞ってはいけませ�
 
 conversationが長くなって新しいsessionへ移った場合、既存Taskへ現在のsessionを追加します。Taskは変わりません。
 
-SessionStart contextにActive Task候補が提示されている場合は、ユーザーが番号またはタイトルを選ぶだけで、対応するTaskへ追加します。
+SessionStart contextに未完了Task候補が提示されている場合は、ユーザーが番号またはタイトルを選ぶだけで、対応するTaskへ追加します。
 候補にないTaskを指定された場合に限り、Task一覧から対象を探します。
 
 ```bash

@@ -35,6 +35,10 @@ run = "go test ./..."
 description = "fmt / vet / test をまとめて実行"
 depends = ["fmt", "vet", "test"]
 
+[tasks.release]
+description = "checkからGitHub Releaseの完了確認まで対話的に実行"
+run = "./scripts/release.sh"
+
 [tasks.install]
 description = "ビルドして $BIN_DIR/everes へ配置"
 depends = ["build"]

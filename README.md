@@ -100,7 +100,7 @@ Skillの変更はリンク先から読み込まれます。hookパッケージ�
 
 通常の操作は、Claude CodeやCodexとの対話から行います。
 
-未登録の新しいAgent Sessionでは、最初のメッセージに対する応答でActive Taskが番号とタイトルで提示されます。番号またはタイトルを選ぶと既存Taskへ紐付きます。Task IDを調べて入力する必要はありません。SessionStart hookだけでは応答は始まらないため、セッション作成後は通常どおり最初のメッセージを送ります。
+未登録の新しいAgent Sessionでは、最初のメッセージに対する応答で未完了Task、新規Taskの提案タイトル、任意タイトルでの新規作成、紐付けなしが提示されます。依頼内容に合う既存Taskがあれば推奨として表示されます。未完了Taskがない場合も、新しいTaskを作るか確認されます。SessionStart hookだけでは応答は始まらないため、セッション作成後は通常どおり最初のメッセージを送ります。
 
 ```text
 この作業をEveresで管理して
@@ -156,6 +156,16 @@ Taskデータとsession indexはClaude CodeやCodexの内部ディレクトリ�
 mise run check   # fmt / vet / test
 mise run build
 ```
+
+## 公開
+
+`main`で次のcommandを実行すると、checkとbuildの成功後に現在のversionと変更対象が表示され、新しいversionの入力を求められます。空Enterでは次のpatch versionを使います。
+
+```bash
+mise run release
+```
+
+versionを入力すると、version表記の更新、再検証、commit、annotated tagの作成、mainとtagのatomic pushを順に実行します。tag pushで起動したGitHub Actionsを待ち、GitHub Releaseを確認できた場合に完了します。途中のcommandが失敗した場合はそこで停止します。commit前の失敗では、書き換えたversion表記を元に戻します。
 
 ## 制約
 

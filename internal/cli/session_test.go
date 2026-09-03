@@ -7,6 +7,61 @@ import (
 	"github.com/tsuyukimakoto/everes/internal/task"
 )
 
+func TestSelectSessionAcceptsUnambiguousPrefix(t *testing.T) {
+	tk, err := task.New("再開")
+	if err != nil {
+		t.Fatalf("task.New() error = %v", err)
+	}
+	tk.AgentSessions = []task.AgentSession{
+		{Provider: "codex", SessionID: "01900000-0000-7000-8000-000000000001"},
+		{Provider: "claude", SessionID: "02900000-0000-7000-8000-000000000002"},
+	}
+
+	got, err := selectSession(tk, "", "01900000")
+	if err != nil {
+		t.Fatalf("selectSession() error = %v", err)
+	}
+	if got.SessionID != tk.AgentSessions[0].SessionID {
+		t.Errorf("selectSession() = %q; want %q", got.SessionID, tk.AgentSessions[0].SessionID)
+	}
+}
+
+func TestSelectSessionAcceptsCompactSuffixWithinProvider(t *testing.T) {
+	tk, err := task.New("再開")
+	if err != nil {
+		t.Fatalf("task.New() error = %v", err)
+	}
+	tk.AgentSessions = []task.AgentSession{
+		{Provider: "codex", SessionID: "01900000-0000-7000-8000-000000000001"},
+		{Provider: "claude", SessionID: "01900000-0000-7000-8000-000000000001"},
+		{Provider: "claude", SessionID: "01900000-0000-7000-8000-000000000002"},
+	}
+
+	got, err := selectSession(tk, "claude", "00000002")
+	if err != nil {
+		t.Fatalf("selectSession() error = %v", err)
+	}
+	if got != tk.AgentSessions[2] {
+		t.Errorf("selectSession() = %#v; want %#v", got, tk.AgentSessions[2])
+	}
+}
+
+func TestSelectSessionRejectsAmbiguousPrefix(t *testing.T) {
+	tk, err := task.New("再開")
+	if err != nil {
+		t.Fatalf("task.New() error = %v", err)
+	}
+	tk.AgentSessions = []task.AgentSession{
+		{Provider: "codex", SessionID: "01900000-a"},
+		{Provider: "codex", SessionID: "01900000-b"},
+	}
+
+	_, err = selectSession(tk, "", "01900000")
+	if err == nil || !strings.Contains(err.Error(), "複数のsessionに一致") {
+		t.Fatalf("selectSession() error = %v; want ambiguous prefix error", err)
+	}
+}
+
 func TestDisplaySessionStatusUsesNotSetForMissingStatus(t *testing.T) {
 	if got := displaySessionStatus(""); got != "not_set" {
 		t.Errorf("displaySessionStatus(empty) = %q; want %q", got, "not_set")

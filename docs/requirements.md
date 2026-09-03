@@ -482,7 +482,7 @@ Claude session IDを取得
 既存Taskとの対応を検索
         ↓
 存在すればTask情報をAgentへ提示
-存在しなければActive Task候補をAgentへ提示
+存在しなければ未完了Task候補と新規Task作成方針をAgentへ提示
 ```
 
 `everes hook session-start` はhook専用の出口とする。
@@ -494,14 +494,15 @@ Claude session IDを取得
 振る舞いは以下の2通りのみ。
 
 * 現在sessionに紐づくTaskが存在する場合、objective / status / summary / next_action / resume_when / references / notes をcontextへ出力する
-* 存在しない場合、未登録である旨、Active Task候補、現在sessionを候補へ紐付けるために必要な値をcontextへ出力する
+* 存在しない場合、未登録である旨、未完了Task候補、現在sessionを候補へ紐付けるために必要な値、新規Task作成の選択方針をcontextへ出力する
 
-新しいsessionでTaskが未設定の場合、Agentは通常の依頼を進める前に、最初の応答でActive Taskを番号とタイトルで提示し、ユーザーに選択を求める。
+新しいsessionでTaskが未設定の場合、Agentは通常の依頼を進める前に、最初の応答でTaskへの紐付けをユーザーに確認する。
+最初のユーザーメッセージと未完了Taskのtitle、objective、summary、next_action、resume_whenを比較し、明確に一致するTaskがあれば1件を推奨する。推奨以外の未完了Taskもすべて選択肢に含める。
+最初のユーザーメッセージから作業を端的に表す新規Taskタイトルを1件提案し、提案タイトルでの新規作成、ユーザーが入力するタイトルでの新規作成、どのTaskにも紐付けない選択肢を含める。未完了Taskがない場合も、新しいTaskを作るか確認して同じ新規作成選択肢を提示する。
 Task IDはcontext内の値を使い、ユーザーに入力を求めない。
-選択肢には、どのTaskにも紐付けない選択を含める。
 
 ユーザーが選択するまでは、Taskを作成・更新・紐付けしない。
-選択された場合だけ、Agentが `everes session attach` を実行する。
+既存Taskが選択された場合だけ、Agentが `everes session attach` を実行する。新規Taskが選択された場合だけ、Agentが現在sessionへ紐づくTaskを作成する。
 
 Claude Code SkillからEveres CLIを呼べる構成にする。Claude Codeでは `SKILL.md` ベースのSkillを利用できる。
 
@@ -673,29 +674,16 @@ statusをdoneにする。
 
 # 15. AIによる状態更新ルール
 
-毎ターン自動更新しない。
+status、Taskの完了、objectiveはconversationから推測して自動変更しない。別sessionへの委譲を始めたときや、sessionまたはTaskの担当内容が終わったと判断したときは、AIが変更候補を示してユーザーに確認する。ユーザーが同じ発言でstatusを指定していれば、重ねて確認しない。
 
-AIがconversationから状態を常時推測して書き換える設計は禁止する。
+Agent Sessionのsummaryとnext_actionは履歴ではなく、現在地を可視化する置換可能なsnapshotとする。Everesで管理中のsessionでは、次の節目で内容が古くなっていれば更新する。
 
-理由:
+* 実装や検証が一区切りつき、現在地が変わったとき
+* 別sessionへ仕事を委譲する前
+* 長い作業を区切るとき
+* 最終回答の前
 
-* 状態の誤判定
-* objectiveの意図しない変更
-* summaryの頻繁な揺れ
-* 不要な書き込み
-* 人間が信頼できない管理情報になる
-
-更新契機は基本的に明示操作とする。
-
-ただし将来的には以下をoptional automationとして追加可能。
-
-```text
-session end
-compaction
-background化
-明示的な「待ち」
-PR作成
-```
+毎ターン更新したり、進捗がないのに文面だけを書き換えたりしない。Skill単独ではwall clockによる定期処理を行えないため、時間間隔ではなく意味のある作業区切りを更新契機とする。判断経緯や恒久的な情報はsnapshotへ混ぜず、noteへ追加する。
 
 ---
 
@@ -843,29 +831,16 @@ NEEDS ME
 
 ╭─ 01K2N86E2AS3  認証API変更
 │  Task  NEEDS ME (2 sessions) · 12 min ago
-│
-│  現在地
-│    レビュー指摘への対応が必要
-│
-│  次の作業
-│    指摘内容を確認して修正する
-│
-│  参照
-│    GitHub #381
-├─ Sessions
-│
+│  現在地: レビュー指摘への対応が必要
+│  次: 指摘内容を確認して修正する
+│  参照: GitHub #381
+├─ Sessions  1 open · 1 done
 │  ┌─ NEEDS_ME  codex:修正
-│  │  現在地
-│  │    指摘内容を確認中
-│  │
-│  │  次の作業
-│  │    修正してテストする
+│  │  現在地: 指摘内容を確認中
+│  │  次: 修正してテストする
 │  └─
-│
-│  ┌─ DONE  claude:調査
-│  │  現在地
-│  │    影響範囲の確認完了
-│  └─
+│  ✓ claude:調査 — 影響範囲の確認完了
+│    復帰: everes session open 01K2N86E2AS3 --provider claude --session-id 00000002
 ╰─
 
 
@@ -873,20 +848,12 @@ WAITING
 
 ╭─ 01K2N86E2BT4  通知基盤変更
 │  Task  WAITING (1 session) · 2 days ago
-│
-│  現在地
-│    API仕様確定待ち
-│
-│  再開条件
-│    Issue #422が確定したら
-├─ Sessions
-│
+│  現在地: API仕様確定待ち
+│  再開: Issue #422が確定したら
+├─ Sessions  1 open
 │  ┌─ WAITING  codex:実装
-│  │  現在地
-│  │    API案を作成済み
-│  │
-│  │  再開条件
-│  │    Issue #422が確定したら再開
+│  │  現在地: API案を作成済み
+│  │  再開: Issue #422が確定したら再開
 │  └─
 ╰─
 
@@ -895,25 +862,15 @@ ACTIVE
 
 ╭─ 01K2N86E2CU5  動画export高速化
 │  Task  ACTIVE (2 sessions) · 34 min ago
-│
-│  現在地
-│    Metal encoder周辺を調査中
-│
-│  次の作業
-│    Instrumentsでボトルネックを確認する
-├─ Sessions
-│
+│  現在地: Metal encoder周辺を調査中
+│  次: Instrumentsでボトルネックを確認する
+├─ Sessions  2 open
 │  ┌─ ACTIVE  codex:計測
-│  │  現在地
-│  │    encoderを計測中
-│  │
-│  │  次の作業
-│  │    ボトルネックを特定する
+│  │  現在地: encoderを計測中
+│  │  次: ボトルネックを特定する
 │  └─
-│
 │  ┌─ PAUSED  claude:資料調査
-│  │  現在地
-│  │    関連資料を整理済み
+│  │  現在地: 関連資料を整理済み
 │  └─
 ╰─
 ```
@@ -934,7 +891,9 @@ updated_at
 
 短縮task-idを出すのは、続く操作でTaskを指定する必要があるためである。
 
-Taskの `resume_when` と `next_action` はどちらか一方を出す。`waiting` では `resume_when` を、それ以外では `next_action` を優先する。Agent Sessionにも同じ規則を適用する。statusとsession名は見出しに置き、summary、next_action、resume_when、確認予定は項目ごとの段に分ける。本文はTerminal幅に合わせて折り返し、継続行を同じ項目のインデントへ揃える。
+Taskの `resume_when` と `next_action` はどちらか一方を出す。`waiting` では `resume_when` を、それ以外では `next_action` を優先する。Agent Sessionにも同じ規則を適用する。項目名と短い本文は同じ行に置き、Terminal幅を超える本文だけを同じ項目のインデントへ折り返す。空行はTask group間にだけ置き、Task内では使わない。
+
+未完了sessionはstatus、provider、label、summary、next_actionまたはresume_when、確認予定を展開する。done sessionは一覧上で自動的に圧縮し、providerとlabel、完了時のsummary、provider内で一意になるsession ID末尾を使う復帰commandを2行以内で示す。`session open --session-id` は完全一致のほか、一意な先頭または末尾を受け付ける。通常のcommand出力は対話状態を保持できないため折り畳み操作は設けず、この圧縮表示を既定の折り畳み相当とする。全項目は `task show` と `session list` で確認できる。
 
 ---
 

@@ -44,15 +44,15 @@ func TestRenderListShowsTaskAndSessionsAsHierarchy(t *testing.T) {
 	for _, want := range []string{
 		"╭─ " + task.ShortID(tk.TaskID) + "  公開準備",
 		"│  Task  ACTIVE (2 sessions)",
-		"│  現在地\n│    リリース候補を確認中",
-		"│  次の作業\n│    公開前の確認項目を整理する",
-		"├─ Sessions",
+		"│  現在地: リリース候補を確認中",
+		"│  次: 公開前の確認項目を整理する",
+		"├─ Sessions  2 open",
 		"│  ┌─ ACTIVE  ↗ codex:実装",
-		"│  │  現在地\n│  │    署名済みbuildを作成中",
-		"│  │  次の作業\n│  │    archiveを検証する",
+		"│  │  現在地: 署名済みbuildを作成中",
+		"│  │  次: archiveを検証する",
 		"│  ┌─ WAITING  claude:レビュー",
-		"│  │  現在地\n│  │    metadataの確認を依頼済み",
-		"│  │  再開条件\n│  │    レビューが返ったら修正する",
+		"│  │  現在地: metadataの確認を依頼済み",
+		"│  │  再開: レビューが返ったら修正する",
 		"╰─",
 	} {
 		if !strings.Contains(got, want) {
@@ -90,8 +90,37 @@ func TestRenderListWrapsStagedFieldsToTerminalWidth(t *testing.T) {
 			t.Errorf("line width = %d; want <= 40:\n%s", got, line)
 		}
 	}
-	if !strings.Contains(out.String(), "│    日本語の長い説明でもセッションごと\n│    の範囲が分かるように折り返して表示") {
+	if !strings.Contains(out.String(), "│  現在地: 日本語の長い説明でもセッショ\n│          ンごとの範囲が分かるように") {
 		t.Errorf("rendered list did not wrap task summary with continuation indent:\n%s", out.String())
+	}
+}
+
+func TestRenderListCompactsDoneSessionsWithCompletionAndResumeCommand(t *testing.T) {
+	now := time.Date(2026, 8, 20, 12, 0, 0, 0, time.Local)
+	tk, err := task.New("公開準備")
+	if err != nil {
+		t.Fatalf("task.New() error = %v", err)
+	}
+	tk.AgentSessions = []task.AgentSession{
+		{Provider: "codex", SessionID: "01900000-0000-7000-8000-000000000001", Label: "実装", Status: task.StatusActive},
+		{Provider: "claude", SessionID: "01900000-0000-7000-8000-000000000002", Label: "調査", Status: task.StatusDone, Summary: "公開要件の確認を完了"},
+	}
+	tk.RecomputeStatus()
+
+	var out strings.Builder
+	renderList(&out, []*task.Task{tk}, now)
+	got := out.String()
+	for _, want := range []string{
+		"├─ Sessions  1 open · 1 done",
+		"│  ✓ claude:調査 — 公開要件の確認を完了",
+		"│    復帰: everes session open " + task.ShortID(tk.TaskID) + " --provider claude --session-id 00000002",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("renderList() =\n%s\nwant substring %q", got, want)
+		}
+	}
+	if strings.Contains(got, "┌─ DONE") {
+		t.Errorf("renderList() =\n%s\ndone session must not use expanded layout", got)
 	}
 }
 

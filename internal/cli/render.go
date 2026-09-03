@@ -58,18 +58,48 @@ func renderListItem(w io.Writer, t *task.Task, now time.Time, links bool, width 
 
 	fields := taskListFields(t, now)
 	for _, field := range fields {
-		fmt.Fprintln(w, "│")
-		writeStagedField(w, "│  ", "│    ", field, width)
+		writeInlineField(w, "│  ", field, width)
 	}
 
 	if len(t.AgentSessions) > 0 {
-		fmt.Fprintln(w, "├─ Sessions")
+		openCount, doneCount := sessionStatusCounts(t.AgentSessions)
+		fmt.Fprintf(w, "├─ Sessions  %s\n", sessionBreakdown(openCount, doneCount))
 		for _, attached := range t.AgentSessions {
-			fmt.Fprintln(w, "│")
-			renderSessionListItem(w, t, attached, now, links, width)
+			if attached.Status == task.StatusDone {
+				continue
+			}
+			renderOpenSessionListItem(w, t, attached, now, links, width)
+		}
+		for _, attached := range t.AgentSessions {
+			if attached.Status != task.StatusDone {
+				continue
+			}
+			renderDoneSessionListItem(w, t, attached, width)
 		}
 	}
 	fmt.Fprintln(w, "╰─")
+}
+
+func sessionStatusCounts(sessions []task.AgentSession) (open, done int) {
+	for _, session := range sessions {
+		if session.Status == task.StatusDone {
+			done++
+		} else {
+			open++
+		}
+	}
+	return open, done
+}
+
+func sessionBreakdown(open, done int) string {
+	parts := make([]string, 0, 2)
+	if open > 0 {
+		parts = append(parts, fmt.Sprintf("%d open", open))
+	}
+	if done > 0 {
+		parts = append(parts, fmt.Sprintf("%d done", done))
+	}
+	return strings.Join(parts, " · ")
 }
 
 type listField struct {
@@ -112,7 +142,7 @@ func sessionCountLabel(count int) string {
 	}
 }
 
-func renderSessionListItem(w io.Writer, t *task.Task, attached task.AgentSession, now time.Time, links bool, width int) {
+func renderOpenSessionListItem(w io.Writer, t *task.Task, attached task.AgentSession, now time.Time, links bool, width int) {
 	status := strings.ToUpper(displaySessionStatus(attached.Status))
 	name := sessionDisplayName(attached, links)
 	fmt.Fprintf(w, "│  ┌─ %s  %s\n", status, name)
@@ -121,13 +151,23 @@ func renderSessionListItem(w io.Writer, t *task.Task, attached task.AgentSession
 	if resume, ok := claudeResumeCommand(t, attached); ok {
 		fields = append(fields, listField{Label: "再開", Value: resume.Command})
 	}
-	for i, field := range fields {
-		if i > 0 {
-			fmt.Fprintln(w, "│  │")
-		}
-		writeStagedField(w, "│  │  ", "│  │    ", field, width)
+	for _, field := range fields {
+		writeInlineField(w, "│  │  ", field, width)
 	}
 	fmt.Fprintln(w, "│  └─")
+}
+
+func renderDoneSessionListItem(w io.Writer, t *task.Task, attached task.AgentSession, width int) {
+	// OSC 8 linkは折り返し幅を正しく数えられないため、圧縮行はplain textにする。
+	// 直後の復帰commandはproviderを問わず使用できる。
+	name := sessionDisplayName(attached, false)
+	summary := attached.Summary
+	if summary == "" {
+		summary = "完了内容未記録"
+	}
+	writeCompactLine(w, "│  ", "✓ "+name+" — "+summary, width)
+	writeCompactLine(w, "│    ", fmt.Sprintf("復帰: everes session open %s --provider %s --session-id %s",
+		task.ShortID(t.TaskID), shellWord(attached.Provider), shellWord(compactSessionSelector(t, attached))), width)
 }
 
 func sessionListFields(attached task.AgentSession, now time.Time) []listField {
@@ -141,13 +181,13 @@ func sessionListFields(attached task.AgentSession, now time.Time) []listField {
 	switch attached.Status {
 	case task.StatusWaiting, task.StatusPaused:
 		if attached.ResumeWhen != "" {
-			fields = append(fields, listField{Label: "再開条件", Value: attached.ResumeWhen})
+			fields = append(fields, listField{Label: "再開", Value: attached.ResumeWhen})
 		} else if attached.NextAction != "" {
-			fields = append(fields, listField{Label: "次の作業", Value: attached.NextAction})
+			fields = append(fields, listField{Label: "次", Value: attached.NextAction})
 		}
 	default:
 		if attached.NextAction != "" {
-			fields = append(fields, listField{Label: "次の作業", Value: attached.NextAction})
+			fields = append(fields, listField{Label: "次", Value: attached.NextAction})
 		}
 	}
 	if attached.CheckAt != nil {
@@ -201,8 +241,31 @@ func claudeResumeCommand(t *task.Task, attached task.AgentSession) (sessionResum
 	return sessionResumeCommand{
 		Label: label,
 		Command: fmt.Sprintf("everes session open %s --provider claude --session-id %s",
-			task.ShortID(t.TaskID), shellWord(attached.SessionID)),
+			task.ShortID(t.TaskID), shellWord(compactSessionSelector(t, attached))),
 	}, true
+}
+
+// compactSessionSelector は同じprovider内で一意になる末尾を返す。
+// UUIDv7は先頭が時刻で揃いやすいため、復帰commandにはrandom性のある末尾を使う。
+func compactSessionSelector(t *task.Task, attached task.AgentSession) string {
+	id := attached.SessionID
+	start := 8
+	if len(id) < start {
+		start = len(id)
+	}
+	for length := start; length <= len(id); length++ {
+		candidate := id[len(id)-length:]
+		matches := 0
+		for _, other := range t.AgentSessions {
+			if other.Provider == attached.Provider && strings.HasSuffix(other.SessionID, candidate) {
+				matches++
+			}
+		}
+		if matches == 1 {
+			return candidate
+		}
+	}
+	return id
 }
 
 func shellWord(value string) string {
@@ -228,11 +291,28 @@ func sanitizeTerminalText(value string) string {
 	}, value)
 }
 
-func writeStagedField(w io.Writer, labelPrefix, valuePrefix string, field listField, width int) {
-	fmt.Fprintf(w, "%s%s\n", labelPrefix, sanitizeTerminalText(field.Label))
-	available := width - terminalDisplayWidth(valuePrefix)
-	for _, line := range wrapTerminalText(sanitizeTerminalText(field.Value), available) {
-		fmt.Fprintf(w, "%s%s\n", valuePrefix, line)
+func writeInlineField(w io.Writer, prefix string, field listField, width int) {
+	label := sanitizeTerminalText(field.Label) + ": "
+	firstPrefix := prefix + label
+	continuation := prefix + strings.Repeat(" ", terminalDisplayWidth(label))
+	lines := wrapTerminalText(sanitizeTerminalText(field.Value), width-terminalDisplayWidth(firstPrefix))
+	for i, line := range lines {
+		if i == 0 {
+			fmt.Fprintf(w, "%s%s\n", firstPrefix, line)
+		} else {
+			fmt.Fprintf(w, "%s%s\n", continuation, line)
+		}
+	}
+}
+
+func writeCompactLine(w io.Writer, prefix, value string, width int) {
+	continuation := prefix
+	for i, line := range wrapTerminalText(sanitizeTerminalText(value), width-terminalDisplayWidth(prefix)) {
+		if i == 0 {
+			fmt.Fprintf(w, "%s%s\n", prefix, line)
+		} else {
+			fmt.Fprintf(w, "%s%s\n", continuation, line)
+		}
 	}
 }
 
@@ -322,13 +402,13 @@ func listGroup(t *task.Task, now time.Time) string {
 
 func listHint(t *task.Task) (string, string) {
 	if t.Status == task.StatusWaiting && t.ResumeWhen != "" {
-		return "再開条件", t.ResumeWhen
+		return "再開", t.ResumeWhen
 	}
 	if t.NextAction != "" {
-		return "次の作業", t.NextAction
+		return "次", t.NextAction
 	}
 	if t.ResumeWhen != "" {
-		return "再開条件", t.ResumeWhen
+		return "再開", t.ResumeWhen
 	}
 	return "", ""
 }

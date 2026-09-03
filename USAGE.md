@@ -41,8 +41,8 @@ Claude CodeやCodexにEveresのSkillが導入されていれば、次のよう�
 | 条件を指定して確認する | 「レビュー待ちのTaskだけ見せて」 | `waiting` のTaskだけを取得 | 該当するTaskが一覧表示されます |
 | 作業を完了する | 「この作業は完了」 | statusを `done` に更新 | 通常の未完了一覧から外れます |
 
-Everesは、明示的に依頼されたときだけTaskを作成または更新します。
-AIエージェントがconversationから状態を推測して、自動的に記録を書き換えることはありません。
+Taskの作成、status、完了、objectiveは、明示的な依頼またはAIエージェントからの確認に対する回答がある場合だけ変更します。
+Everesで管理中のAgent Sessionでは、実装・検証・委譲などの節目で、AIエージェントがsummaryとnext actionを現在地のsnapshotとして置き換えます。毎ターンの履歴を追記するのではなく、一覧に最新の状態を一つだけ見せるための更新です。
 
 ## 新しい作業を対話から登録する
 
@@ -201,24 +201,28 @@ AIエージェントは未完了のTaskを取得し、`needs_me`、`waiting`、`
 
 ## 新しいAgent Sessionへ引き継ぐ
 
-SessionStart hookが有効で、新しいAgent SessionがどのTaskにも紐付いていない場合、最初のユーザーメッセージに対する応答でActive Taskが番号とタイトルで提示されます。
+SessionStart hookが有効で、新しいAgent SessionがどのTaskにも紐付いていない場合、最初のユーザーメッセージに対する応答で未完了Taskと新規作成の選択肢が提示されます。
 hookだけではAIの応答は始まらないため、セッションを作成したら通常どおり最初のメッセージを送ります。
 AIエージェントはそのメッセージの依頼を進める前にTaskを確認します。
 
 ```text
 このsessionはどのTaskの続きですか？
 
-1. Everesを公開する
-2. 認証方式を変更する
-3. どれにも紐付けない
+1. 認証方式を変更する（推奨）
+2. Everesを公開する
+3. 新規Task「ログイン失敗時の表示を修正」を作成
+4. 別のタイトルを入力して新規Taskを作成
+5. どれにも紐付けない
 ```
 
+AIエージェントは最初のメッセージと各Taskのtitle、objective、summary、next action、resume whenを比較し、明確に合う既存Taskがあれば1件を推奨します。推奨以外の未完了Taskもすべて選択できます。
+新規Taskのタイトルは最初のメッセージから端的なものが1件提案され、そのまま使うか、別のタイトルを入力できます。未完了Taskがない場合は、新しいTaskを作るか同じ選択肢で確認されます。
 番号またはタイトルで選択します。Task IDを調べたり入力したりする必要はありません。
-選択すると、AIエージェントがSessionStart contextに含まれるTask ID、provider、session IDを使い、現在のAgent Sessionを既存Taskへ追加します。
+既存Taskを選択すると、AIエージェントがSessionStart contextに含まれるTask ID、provider、session IDを使い、現在のAgent Sessionを追加します。新規Taskを選択すると、選んだタイトルでTaskを作成して現在のAgent Sessionを紐付けます。
 選択するまではTaskの作成、更新、紐付けは行われません。
 
-候補になるのは `active` 状態のTaskだけです。
-`waiting`、`needs_me`、`paused`、`done` のTaskへ引き継ぐ場合や、候補から選ばなかった場合は、Taskのタイトルを指定して依頼します。
+候補になるのは `done` 以外のTaskです。
+`done` のTaskへ引き継ぐ場合は、Taskのタイトルを指定して依頼します。
 
 ```text
 このsessionを認証方式変更のTaskに紐付けて、ラベルは「レビュー指摘の反映」にして
@@ -226,9 +230,9 @@ AIエージェントはそのメッセージの依頼を進める前にTaskを�
 
 AIエージェントは既存Taskを特定し、新しいAgent Sessionを追加します。
 以前のAgent Sessionは削除されないため、一つのTaskから複数のconversationを確認できます。
-`everes task list`ではTaskごとに枠を分け、Taskの集約statusとsession数を表示し、その下に各sessionを段組みで並べます。
-各sessionはstatus、provider、labelを見出しにし、summary、next actionまたはresume when、確認予定を項目ごとの行へ分けます。長い本文はTerminal幅に合わせて同じ項目内で折り返します。リンク対応ターミナルで `↗ codex:<label>` を選択すると、`codex://threads/<thread-id>` が開き、Codexアプリの該当taskへ移動します。
-Claude sessionの下には `everes session open ... --provider claude --session-id ...` を表示します。コマンドを選択・コピーして実行すると、該当sessionをClaude Code CLIで再開します。ターミナルのリンクには、選択時に文字列をクリップボードへコピーする共通のURL schemeがないため、コピーリンクではなく実行可能なコマンドを表示します。
+`everes task list`ではTaskごとに枠を分け、Taskの集約statusとsession数を表示し、その下に各sessionを並べます。項目名と本文は同じ行に置き、長い本文だけをTerminal幅に合わせて折り返すため、空行を挟む段組みより少ない行数で全体を確認できます。
+未完了sessionはstatus、provider、label、summary、next actionまたはresume when、確認予定を表示します。done sessionは「どのsessionか・完了時のsummary・復帰command」だけの圧縮表示になります。通常のCLI出力は対話的に折り畳めないため、この圧縮を既定の折り畳み相当として扱い、詳細は `everes task show <task-id>` で確認します。
+リンク対応ターミナルで `↗ codex:<label>` を選択すると、`codex://threads/<thread-id>` が開きます。Claude sessionには `everes session open` commandを表示します。復帰commandはprovider名と、そのprovider内で一意になるsession ID末尾（通常8文字）を表示します。`--session-id` は完全一致のほか、一意な先頭または末尾でも指定できます。
 sessionごとのID、label、保存状態は `everes session list <task-id>` で確認します。
 
 同じディレクトリで複数のAgent Sessionを開いている場合、自動検出では現在のsessionを一意に決められません。

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/tsuyukimakoto/everes/internal/provider"
@@ -594,12 +595,23 @@ func openSessionInApp(target task.AgentSession) error {
 // 指定がなければ最後に使われたsessionをdefaultとする。
 func selectSession(t *task.Task, providerName, sessionID string) (task.AgentSession, error) {
 	if sessionID != "" {
+		var matched []task.AgentSession
 		for _, s := range t.AgentSessions {
-			if s.SessionID == sessionID {
-				return s, nil
+			if providerName != "" && s.Provider != providerName {
+				continue
+			}
+			if strings.HasPrefix(s.SessionID, sessionID) || strings.HasSuffix(s.SessionID, sessionID) {
+				matched = append(matched, s)
 			}
 		}
-		return task.AgentSession{}, fmt.Errorf("session %s はこのTaskに紐付いていません", sessionID)
+		switch len(matched) {
+		case 0:
+			return task.AgentSession{}, fmt.Errorf("session %s はこのTaskに紐付いていません", sessionID)
+		case 1:
+			return matched[0], nil
+		default:
+			return task.AgentSession{}, fmt.Errorf("session %s は複数のsessionに一致します。より長く指定してください", sessionID)
+		}
 	}
 
 	if providerName != "" {
