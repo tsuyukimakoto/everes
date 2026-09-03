@@ -1415,7 +1415,7 @@ plugin.json
 
 ```yaml
 name: everes
-version: 0.2.0
+version: 0.3.0
 description: 並行するAIコーディング作業のTask Context Manager
 targets:
   - claude

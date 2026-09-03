@@ -31,7 +31,7 @@ apmがない場合は、先に[APM公式の導入手順](https://microsoft.githu
 CLI本体と、Claude Code / Codex用のSkillとhookを同じrelease tagからインストールします。
 
 ```bash
-EVERES_VERSION=v0.2.0
+EVERES_VERSION=v0.3.0
 curl -fsSL "https://raw.githubusercontent.com/tsuyukimakoto/everes/${EVERES_VERSION}/install.sh" | bash -s -- "$EVERES_VERSION"
 apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
 apm install -g "tsuyukimakoto/everes/.apm/packages/everes-claude-hook#${EVERES_VERSION}" --target claude
@@ -64,7 +64,7 @@ apm install -g "tsuyukimakoto/everes/.apm/packages/everes-codex-hook#${EVERES_VE
 Go moduleとして導入する場合は、Go 1.26以降を用意してrelease tagを指定します。
 
 ```bash
-GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@v0.2.0
+GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@v0.3.0
 ```
 
 ### リポジトリから開発用に導入
