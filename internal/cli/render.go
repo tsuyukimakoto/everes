@@ -30,7 +30,7 @@ func renderListWithLinks(w io.Writer, tasks []*task.Task, now time.Time, links b
 // renderListWithWidth はTerminalの表示幅を指定してTask一覧を書き出す。
 func renderListWithWidth(w io.Writer, tasks []*task.Task, now time.Time, links bool, width int) {
 	if len(tasks) == 0 {
-		fmt.Fprintln(w, "Taskがありません。everes task create で作成してください。")
+		fmt.Fprintln(w, "No Tasks found. Create one with everes task create.")
 		return
 	}
 
@@ -110,15 +110,15 @@ type listField struct {
 func taskListFields(t *task.Task, now time.Time) []listField {
 	var fields []listField
 	if t.Summary != "" {
-		fields = append(fields, listField{Label: "現在地", Value: t.Summary})
+		fields = append(fields, listField{Label: "Current", Value: t.Summary})
 	}
 	if label, hint := listHint(t); hint != "" {
 		fields = append(fields, listField{Label: label, Value: hint})
 	}
 	if t.CheckAt != nil {
-		label := "確認予定"
+		label := "Check"
 		if t.CheckDue(now) {
-			label = "! 確認時刻超過"
+			label = "! Check overdue"
 		}
 		fields = append(fields, listField{
 			Label: label,
@@ -126,7 +126,7 @@ func taskListFields(t *task.Task, now time.Time) []listField {
 		})
 	}
 	if refs := refSummary(t); refs != "" {
-		fields = append(fields, listField{Label: "参照", Value: refs})
+		fields = append(fields, listField{Label: "References", Value: refs})
 	}
 	return fields
 }
@@ -149,7 +149,7 @@ func renderOpenSessionListItem(w io.Writer, t *task.Task, attached task.AgentSes
 
 	fields := sessionListFields(attached, now)
 	if resume, ok := claudeResumeCommand(t, attached); ok {
-		fields = append(fields, listField{Label: "再開", Value: resume.Command})
+		fields = append(fields, listField{Label: "Resume", Value: resume.Command})
 	}
 	for _, field := range fields {
 		writeInlineField(w, "│  │  ", field, width)
@@ -163,37 +163,37 @@ func renderDoneSessionListItem(w io.Writer, t *task.Task, attached task.AgentSes
 	name := sessionDisplayName(attached, false)
 	summary := attached.Summary
 	if summary == "" {
-		summary = "完了内容未記録"
+		summary = "No completion summary"
 	}
 	writeCompactLine(w, "│  ", "✓ "+name+" — "+summary, width)
-	writeCompactLine(w, "│    ", fmt.Sprintf("復帰: everes session open %s --provider %s --session-id %s",
+	writeCompactLine(w, "│    ", fmt.Sprintf("Reopen: everes session open %s --provider %s --session-id %s",
 		task.ShortID(t.TaskID), shellWord(attached.Provider), shellWord(compactSessionSelector(t, attached))), width)
 }
 
 func sessionListFields(attached task.AgentSession, now time.Time) []listField {
 	var fields []listField
 	if attached.Status == "" {
-		fields = append(fields, listField{Label: "状態", Value: "status未設定"})
+		fields = append(fields, listField{Label: "Status", Value: "not set"})
 	}
 	if attached.Summary != "" {
-		fields = append(fields, listField{Label: "現在地", Value: attached.Summary})
+		fields = append(fields, listField{Label: "Current", Value: attached.Summary})
 	}
 	switch attached.Status {
 	case task.StatusWaiting, task.StatusPaused:
 		if attached.ResumeWhen != "" {
-			fields = append(fields, listField{Label: "再開", Value: attached.ResumeWhen})
+			fields = append(fields, listField{Label: "Resume", Value: attached.ResumeWhen})
 		} else if attached.NextAction != "" {
-			fields = append(fields, listField{Label: "次", Value: attached.NextAction})
+			fields = append(fields, listField{Label: "Next", Value: attached.NextAction})
 		}
 	default:
 		if attached.NextAction != "" {
-			fields = append(fields, listField{Label: "次", Value: attached.NextAction})
+			fields = append(fields, listField{Label: "Next", Value: attached.NextAction})
 		}
 	}
 	if attached.CheckAt != nil {
-		label := "確認予定"
+		label := "Check"
 		if attached.CheckDue(now) {
-			label = "! 確認時刻超過"
+			label = "! Check overdue"
 		}
 		fields = append(fields, listField{
 			Label: label,
@@ -402,13 +402,13 @@ func listGroup(t *task.Task, now time.Time) string {
 
 func listHint(t *task.Task) (string, string) {
 	if t.Status == task.StatusWaiting && t.ResumeWhen != "" {
-		return "再開", t.ResumeWhen
+		return "Resume", t.ResumeWhen
 	}
 	if t.NextAction != "" {
-		return "次", t.NextAction
+		return "Next", t.NextAction
 	}
 	if t.ResumeWhen != "" {
-		return "再開", t.ResumeWhen
+		return "Resume", t.ResumeWhen
 	}
 	return "", ""
 }
@@ -438,7 +438,7 @@ func renderDetail(w io.Writer, t *task.Task, now time.Time) {
 		writeField(w, "Check At", formatCheckAt(*t.CheckAt, now.Location()))
 		writeField(w, "Check Action", t.CheckAction)
 		if t.CheckDue(now) {
-			writeField(w, "Attention", "確認時刻を過ぎています")
+			writeField(w, "Attention", "The scheduled check time has passed")
 		}
 	}
 
@@ -482,7 +482,7 @@ func renderDetail(w io.Writer, t *task.Task, now time.Time) {
 				fmt.Fprintf(w, "        Check: %s\n", s.CheckAction)
 			}
 		}
-		fmt.Fprintf(w, "\n  再開: everes session open %s\n", task.ShortID(t.TaskID))
+		fmt.Fprintf(w, "\n  Resume: everes session open %s\n", task.ShortID(t.TaskID))
 	}
 
 	if len(t.Notes) > 0 {

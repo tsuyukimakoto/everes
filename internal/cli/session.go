@@ -95,9 +95,9 @@ func runSession(args []string) error {
 
 func runSessionDetach(args []string) error {
 	fs := newFlagSet("session detach", os.Stderr)
-	providerName := fs.String("provider", "", "外すsessionのprovider (必須)")
-	sessionID := fs.String("session-id", "", "外すsessionのID (必須)")
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	providerName := fs.String("provider", "", "provider of the session to detach (required)")
+	sessionID := fs.String("session-id", "", "ID of the session to detach (required)")
+	asJSON := fs.Bool("json", false, "output JSON")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -161,7 +161,7 @@ type sessionState struct {
 
 func runSessionList(args []string) error {
 	fs := newFlagSet("session list", os.Stderr)
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	asJSON := fs.Bool("json", false, "output JSON")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -190,7 +190,7 @@ func runSessionList(args []string) error {
 
 	fmt.Printf("%s\n\n", t.Title)
 	if len(states) == 0 {
-		fmt.Println("Agent sessionは紐付いていません。")
+		fmt.Println("No Agent Sessions are attached.")
 		return nil
 	}
 	for _, state := range states {
@@ -198,22 +198,22 @@ func runSessionList(args []string) error {
 		if state.Label != "" {
 			fmt.Printf("        %s\n", state.Label)
 		}
-		availability := "provider側の記録なし"
+		availability := "provider record missing"
 		if state.Exists {
-			availability = "provider側の記録あり"
+			availability = "provider record found"
 		}
-		fmt.Printf("        %s  Everesでの最終確認: %s\n", availability, relTime(state.LastSeenAt, time.Now()))
+		fmt.Printf("        %s  last seen by Everes: %s\n", availability, relTime(state.LastSeenAt, time.Now()))
 		if modifiedAt, ok := state.Metadata["modified_at"].(string); ok {
-			fmt.Printf("        provider更新時刻: %s\n", modifiedAt)
+			fmt.Printf("        provider modified at: %s\n", modifiedAt)
 		}
 		if state.Error != "" {
-			fmt.Printf("        確認エラー: %s\n", state.Error)
+			fmt.Printf("        inspection error: %s\n", state.Error)
 		}
 		if state.Summary != "" {
 			fmt.Printf("        %s\n", state.Summary)
 		}
 		if state.CheckAt != nil {
-			fmt.Printf("        確認予定 %s: %s\n", formatCheckAt(*state.CheckAt, time.Local), state.CheckAction)
+			fmt.Printf("        scheduled check %s: %s\n", formatCheckAt(*state.CheckAt, time.Local), state.CheckAction)
 		}
 	}
 	return nil
@@ -265,7 +265,7 @@ func collectSessionStates(t *task.Task) []sessionState {
 
 func runSessionCurrent(args []string) error {
 	fs := newFlagSet("session current", os.Stderr)
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	asJSON := fs.Bool("json", false, "output JSON")
 	providerName := fs.String("provider", "", "provider (claude, codex)")
 	sessionID := fs.String("session-id", "", "session ID")
 
@@ -286,7 +286,7 @@ func runSessionCurrent(args []string) error {
 		if *asJSON {
 			return writeJSON(os.Stdout, currentOutput{})
 		}
-		fmt.Println("現在のsessionを特定できませんでした。--provider と --session-id を指定してください。")
+		fmt.Println("Could not identify the current session. Specify --provider and --session-id.")
 		return nil
 	}
 
@@ -309,8 +309,8 @@ func runSessionCurrent(args []string) error {
 
 	if t == nil {
 		fmt.Printf("[%s] %s\n", sess.Provider, sess.SessionID)
-		fmt.Println("このsessionに紐づくTaskはありません。")
-		fmt.Println("everes task create --title \"...\" で作成できます。")
+		fmt.Println("No Task is attached to this session.")
+		fmt.Println("Create one with everes task create --title \"...\".")
 		return nil
 	}
 
@@ -323,9 +323,9 @@ func runSessionAttach(args []string) error {
 	fs := newFlagSet("session attach", os.Stderr)
 	providerName := fs.String("provider", "", "provider (claude, codex)")
 	sessionID := fs.String("session-id", "", "session ID")
-	label := fs.String("label", "", "Agent sessionのラベル")
+	label := fs.String("label", "", "Agent Session label")
 	statusName := fs.String("status", string(task.StatusActive), "session status")
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	asJSON := fs.Bool("json", false, "output JSON")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -389,14 +389,14 @@ func runSessionUpdate(args []string) error {
 	fs := newFlagSet("session update", os.Stderr)
 	providerName := fs.String("provider", "", "provider (claude, codex)")
 	sessionID := fs.String("session-id", "", "session ID")
-	statusName := fs.String("status", "", "statusを変更する")
-	summary := fs.String("summary", "", "このsessionの現在の状態")
-	nextAction := fs.String("next-action", "", "このsessionで次に行う作業")
-	resumeWhen := fs.String("resume-when", "", "このsessionを再開する条件")
-	checkAt := fs.String("check-at", "", "次に確認するローカル日時（空文字で消去）")
-	checkAction := fs.String("check-action", "", "確認時刻に確認すること（空文字で消去）")
-	revision := fs.Int("revision", 0, "Task revisionが一致する場合のみ更新する")
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	statusName := fs.String("status", "", "change the status")
+	summary := fs.String("summary", "", "replace this session's current-state summary")
+	nextAction := fs.String("next-action", "", "replace this session's next action")
+	resumeWhen := fs.String("resume-when", "", "replace this session's resume condition")
+	checkAt := fs.String("check-at", "", "replace the next local check time (empty string clears it)")
+	checkAction := fs.String("check-action", "", "replace the scheduled check action (empty string clears it)")
+	revision := fs.Int("revision", 0, "update only when the Task revision matches")
+	asJSON := fs.Bool("json", false, "output JSON")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -407,7 +407,7 @@ func runSessionUpdate(args []string) error {
 	set := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
 	if len(set) == 0 || (len(set) == 1 && set["json"]) {
-		return errors.New("更新する項目を1つ以上指定してください")
+		return errors.New("specify at least one field to update")
 	}
 	var parsedCheckAt *time.Time
 	if set["check-at"] && *checkAt != "" {
@@ -490,10 +490,10 @@ func displaySessionStatus(status task.Status) string {
 
 func runSessionOpen(args []string) error {
 	fs := newFlagSet("session open", os.Stderr)
-	providerName := fs.String("provider", "", "開くsessionのprovider")
-	sessionID := fs.String("session-id", "", "開くsessionのID")
-	list := fs.Bool("list", false, "紐づくsessionを一覧するだけで開かない")
-	app := fs.Bool("app", false, "desktop appでsessionを表示する")
+	providerName := fs.String("provider", "", "provider of the session to open")
+	sessionID := fs.String("session-id", "", "ID of the session to open")
+	list := fs.Bool("list", false, "list attached sessions without opening one")
+	app := fs.Bool("app", false, "show the session in the desktop app")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -513,7 +513,7 @@ func runSessionOpen(args []string) error {
 	}
 
 	if len(t.AgentSessions) == 0 {
-		return fmt.Errorf("task %s にAgent sessionが紐付いていません", task.ShortID(t.TaskID))
+		return fmt.Errorf("Task %s has no attached Agent Sessions", task.ShortID(t.TaskID))
 	}
 
 	if *list {
@@ -548,7 +548,7 @@ func runSessionOpen(args []string) error {
 	}
 	if !exists {
 		fmt.Fprintf(os.Stderr,
-			"warn: %s session %s の記録が見つかりません。再開に失敗する可能性があります。\n",
+			"warn: no saved record was found for %s session %s; resuming may fail\n",
 			target.Provider, target.SessionID)
 	}
 
@@ -562,7 +562,7 @@ func runSessionOpen(args []string) error {
 
 var launchAppURL = func(target string) error {
 	if runtime.GOOS != "darwin" {
-		return fmt.Errorf("desktop app linkの起動はmacOSにのみ対応しています")
+		return fmt.Errorf("opening desktop app links is supported only on macOS")
 	}
 	if err := exec.Command("/usr/bin/open", target).Run(); err != nil {
 		return fmt.Errorf("open desktop app link: %w", err)
@@ -587,7 +587,7 @@ func openSessionInApp(target task.AgentSession) error {
 	if label == "" {
 		label = target.SessionID
 	}
-	fmt.Printf("Codex Appで表示しました: %s\n", label)
+	fmt.Printf("Opened in the Codex app: %s\n", label)
 	return nil
 }
 
@@ -606,11 +606,11 @@ func selectSession(t *task.Task, providerName, sessionID string) (task.AgentSess
 		}
 		switch len(matched) {
 		case 0:
-			return task.AgentSession{}, fmt.Errorf("session %s はこのTaskに紐付いていません", sessionID)
+			return task.AgentSession{}, fmt.Errorf("session %s is not attached to this Task", sessionID)
 		case 1:
 			return matched[0], nil
 		default:
-			return task.AgentSession{}, fmt.Errorf("session %s は複数のsessionに一致します。より長く指定してください", sessionID)
+			return task.AgentSession{}, fmt.Errorf("session %s matches multiple sessions; specify a longer ID", sessionID)
 		}
 	}
 
@@ -626,14 +626,14 @@ func selectSession(t *task.Task, providerName, sessionID string) (task.AgentSess
 			}
 		}
 		if !found {
-			return task.AgentSession{}, fmt.Errorf("provider %s のsessionはこのTaskに紐付いていません", providerName)
+			return task.AgentSession{}, fmt.Errorf("no %s session is attached to this Task", providerName)
 		}
 		return latest, nil
 	}
 
 	latest, ok := t.LatestSession()
 	if !ok {
-		return task.AgentSession{}, errors.New("Agent sessionが紐付いていません")
+		return task.AgentSession{}, errors.New("no Agent Sessions are attached")
 	}
 	return latest, nil
 }
@@ -679,11 +679,11 @@ func findProviderBySessionID(sessionID string) (string, error) {
 	}
 	switch len(matched) {
 	case 0:
-		return "", fmt.Errorf("session %s に対応するproviderが不明です。--provider を指定してください", sessionID)
+		return "", fmt.Errorf("the provider for session %s is unknown; specify --provider", sessionID)
 	case 1:
 		return matched[0], nil
 	default:
-		return "", fmt.Errorf("session %s が複数providerに存在します。--provider を指定してください", sessionID)
+		return "", fmt.Errorf("session %s exists under multiple providers; specify --provider", sessionID)
 	}
 }
 

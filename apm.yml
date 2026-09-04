@@ -1,16 +1,20 @@
 name: everes
 version: "0.3.0"
-description: 並行するAIコーディング作業のTask Context Manager
+description: Task Context Manager for parallel AI coding work
 author: tsuyukimakoto
 license: MIT
 targets:
   - claude
   - codex
 includes: auto
-# hook は配置先ごとに別パッケージ（.apm/packages/everes-*-hook）として独立させ、
-# deploy で target ごとに個別 install する。root の dependencies にまとめると
-# --target が依存グラフ全体に適用され各パッケージの targets: を上書きし、
-# 両方の配置先に二重登録される（apm は --target > apm.yml targets: の優先）。
+# hookは配置先ごとに別package（.apm/packages/everes-*-hook）として独立させ、
+# per-dependency targetsでClaude/Codexの一方だけへ配布する。
 dependencies:
-  apm: []
+  apm:
+    - path: ./.apm/packages/everes-claude-hook
+      targets:
+        - claude
+    - path: ./.apm/packages/everes-codex-hook
+      targets:
+        - codex
   mcp: []

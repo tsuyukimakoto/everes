@@ -42,7 +42,7 @@ func TestWriteTaskContextIncludesOverdueWaitingCheck(t *testing.T) {
 	if !strings.Contains(got, "Check:       PR #381のレビュー状況を確認する") {
 		t.Errorf("context = %q; want check action", got)
 	}
-	if !strings.Contains(got, "Attention:   確認時刻を過ぎています。") {
+	if !strings.Contains(got, "Attention:   The scheduled check time has passed.") {
 		t.Errorf("context = %q; want overdue attention", got)
 	}
 }
@@ -56,7 +56,7 @@ func TestWriteTaskContextIncludesExactSession(t *testing.T) {
 	var out bytes.Buffer
 	writeTaskContext(&out, tk, "codex", "01900000-0000-7000-8000-000000000001")
 
-	want := "[Everes] このsession (codex 01900000-0000-7000-8000-000000000001) はTask "
+	want := "[Everes] This session (codex 01900000-0000-7000-8000-000000000001) is attached to Task "
 	if !strings.Contains(out.String(), want) {
 		t.Errorf("context = %q; want it to contain %q", out.String(), want)
 	}
@@ -88,8 +88,8 @@ func TestWriteTaskContextRemindsAgentToRefreshSnapshotAndConfirmStatus(t *testin
 	writeTaskContext(&out, tk, "codex", "current")
 	got := out.String()
 	for _, want := range []string{
-		"summaryとnext actionを現在地のsnapshotとして置き換えてください",
-		"statusを推測で変えず、変更するかユーザーに確認してください",
+		"replace this session's summary and next action with a current snapshot",
+		"do not infer a status change; ask the user whether to change it",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("context = %q; want %q", got, want)
@@ -133,13 +133,13 @@ func TestWriteUnregisteredContextListsAllUnfinishedTasksAndSelectionPolicy(t *te
 		"レビュー結果を待つ",
 		"Status: waiting",
 		"Task ID: " + waiting.TaskID,
-		"最初のユーザーメッセージの依頼内容",
-		"推奨",
-		"既存の未完了Taskをすべて",
-		"作業を端的に表す新規Taskタイトルを1件提案",
-		"提案タイトルで新規Taskを作成",
-		"ユーザーが入力するタイトルで新規Taskを作成",
-		"どれにも紐付けない",
+		"Compare the first user message",
+		"Recommended",
+		"every unfinished Task",
+		"Propose one concise new Task title",
+		"create a new Task with the proposed title",
+		"create a new Task with a title entered by the user",
+		"do not attach this session",
 		"everes session attach " + active.TaskID,
 		"--provider codex",
 		"--session-id 01900000-0000-7000-8000-000000000001",
@@ -167,13 +167,13 @@ func TestWriteUnregisteredContextAsksToCreateWhenThereAreNoUnfinishedTasks(t *te
 
 	got := out.String()
 	for _, want := range []string{
-		"未完了Taskはありません",
-		"新しいTaskを作りますか",
-		"最初のユーザーメッセージの依頼内容",
-		"作業を端的に表す新規Taskタイトルを1件提案",
-		"提案タイトルで新規Taskを作成",
-		"ユーザーが入力するタイトルで新規Taskを作成",
-		"どれにも紐付けない",
+		"There are no unfinished Tasks",
+		"whether they would like to create a new Task",
+		"first user message",
+		"Propose one concise new Task title",
+		"create a new Task with the proposed title",
+		"create a new Task with a title entered by the user",
+		"do not attach this session",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("context = %q; want %q", got, want)

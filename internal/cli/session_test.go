@@ -57,7 +57,7 @@ func TestSelectSessionRejectsAmbiguousPrefix(t *testing.T) {
 	}
 
 	_, err = selectSession(tk, "", "01900000")
-	if err == nil || !strings.Contains(err.Error(), "複数のsessionに一致") {
+	if err == nil || !strings.Contains(err.Error(), "matches multiple sessions") {
 		t.Fatalf("selectSession() error = %v; want ambiguous prefix error", err)
 	}
 }

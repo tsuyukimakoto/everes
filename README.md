@@ -1,5 +1,184 @@
 # Everes
 
+Everes is a Task Context Manager for AI coding work running in parallel.
+
+It helps people understand and resume 10–20 concurrent jobs across tools such as Claude Code and Codex without relying on memory. Even after a conversation becomes long, Everes keeps the purpose, current state, next action, and resume condition visible.
+
+## Core model
+
+Everes manages **Tasks**. Claude Code sessions and Codex threads are treated as **Agent Sessions** working on a Task.
+
+```text
+Task
+ ├── Claude session A
+ ├── Claude session B
+ └── Codex thread C
+```
+
+A Task survives when work moves to a new conversation, so Everes uses its own ULID rather than a provider session ID as the primary key.
+
+Progress and status are recorded per Agent Session. The Task status is derived from those sessions: any active session makes the Task active; if no session is active and every unfinished session is waiting, the Task is waiting. Completing a Task completes all attached sessions. Everes never infers status from provider runtime state or file modification times.
+
+See [USAGE.md](USAGE.md) for detailed usage and [docs/requirements.md](docs/requirements.md) for the design specification.
+
+## Installation
+
+[APM](https://microsoft.github.io/apm/getting-started/installation/) is required. The APM package includes a prebuilt CLI for macOS on Apple silicon, so a Go toolchain is not required.
+
+One command installs the CLI, shared Skill, and SessionStart hooks for Claude Code and Codex from the same release tag:
+
+```bash
+EVERES_VERSION=v0.3.0
+apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
+```
+
+The CLI is stored inside each installed Skill and invoked by absolute path, so Agent and hook execution does not depend on `~/bin` or the shell `PATH`.
+
+```bash
+"$HOME/.agents/skills/everes-task/bin/everes" version
+apm view -g tsuyukimakoto/everes
+```
+
+APM installs the shared Skill into `~/.agents/skills/` and `~/.claude/skills/`, and merges each provider-specific SessionStart hook into that provider's user configuration.
+
+### Updating
+
+Set `EVERES_VERSION` to the desired release tag and run the same install command:
+
+```bash
+EVERES_VERSION=v0.3.0
+apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
+```
+
+Verify both the bundled CLI and package version afterward:
+
+```bash
+"$HOME/.agents/skills/everes-task/bin/everes" version
+apm view -g tsuyukimakoto/everes
+```
+
+If you also want to invoke `everes` directly from a terminal, the optional `install.sh` installs it as `~/bin/everes`. Agent and hook operation does not require this additional installation.
+
+To install it as a Go module, use Go 1.26 or later and specify a release tag:
+
+```bash
+GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@v0.3.0
+```
+
+### Installing from a repository checkout
+
+Build the CLI and deploy the current APM package from a clone:
+
+```bash
+mise run install
+mise run deploy
+```
+
+`apm install -g` records the absolute repository path in `~/.apm/apm.yml`. Run `mise run deploy` again after moving the repository.
+
+### Development setup
+
+Use symlinks when iterating on the local source:
+
+```bash
+mise run dev-setup
+```
+
+This links `~/bin/everes` to `build/everes` and both installed `everes-task` Skills to `.apm/skills/everes-task/`. Existing copies are backed up under `~/.everes/install-backups/` on the first run.
+
+After changing Go code, rebuild the linked binary:
+
+```bash
+mise run build
+```
+
+Skill changes are read through the symlink. Run `mise run dev-setup` again after changing hook packages because APM merges hooks into user configuration files rather than linking them.
+
+## Usage
+
+Normal operation happens through conversation with Claude Code or Codex.
+
+For an unregistered Agent Session, the first response offers unfinished Tasks, a concise proposed title for a new Task, a user-provided title, and an option to remain unattached. A clearly matching existing Task is marked as recommended. The SessionStart hook provides context but does not initiate a response, so send the first message normally after starting a session.
+
+Example requests:
+
+```text
+Manage this work in Everes
+Record the current state and next action in Everes
+Set this Task to waiting in Everes; resume when the review arrives
+Set this Task to waiting until 9:00 tomorrow, then check CI
+Attach this issue
+What am I currently working on?
+This work is complete
+Show the sessions attached to this Task
+Open this Task's release-preparation session in the Codex app
+Send an additional request to the Codex review task
+```
+
+The AI agent uses the `everes-task` Skill to translate those requests into CLI operations. Its source is [.apm/skills/everes-task/SKILL.md](.apm/skills/everes-task/SKILL.md).
+
+Use the CLI directly to inspect Tasks across sessions:
+
+```bash
+everes task list
+everes task list --status waiting
+everes task list --all
+everes task list --json
+```
+
+In terminals that support links, select `↗ codex:<label>` to open the corresponding task in the Codex app. For Claude sessions, the list displays a Claude Code CLI resume command. Claude Desktop and Claude Code CLI maintain separate histories, so Everes resumes Claude sessions through the CLI.
+
+## Storage
+
+```text
+~/.everes/
+├── tasks/<task-id>.json
+├── sessions/<provider>/<session-id>.json
+├── locks/
+└── logs/
+```
+
+Task data and session indexes are not stored in Claude Code or Codex internal directories. Only APM-managed Skills and hook configuration are placed under `~/.claude/` and `~/.codex/`.
+
+Set `EVERES_HOME` to change the storage root. Writes are atomic and guarded with `flock`. Tasks carry a revision number; pass `--revision` to enable optimistic locking.
+
+## Development
+
+The implementation uses only the Go standard library, including its ULID implementation.
+
+```bash
+mise run check
+mise run build
+```
+
+## Release
+
+Run the release task on `main`:
+
+```bash
+mise run release
+```
+
+It runs checks and a build, shows the current version and pending changes, then asks for a new version. Press Enter to accept the next patch version. After input, it updates version references, validates again, commits, creates an annotated tag, atomically pushes `main` and the tag, waits for GitHub Actions, and verifies the GitHub Release. It stops at the first failed command and restores version edits and the bundled binary when failure occurs before the release commit.
+
+## Limitations
+
+- Codex session auto-detection is a fallback that selects the newest ordinary user thread whose cwd matches; it excludes subagents and approval threads
+- `everes session open` uses `codex resume` by default and opens the Codex desktop task when passed `--app`
+- Claude sessions are resumed through `claude --resume`; Everes cannot navigate directly to a Claude Desktop Code-tab session
+- Session records show saved existence and metadata, not whether an agent is currently running
+- Sending work to another session uses the active Codex or Claude Code facility; Everes does not provide a mailbox
+- A dedicated management UI is not yet implemented; `everes task list` is the current overview
+- GitHub and Google Workspace URLs are stored as references; Everes does not synchronize their APIs
+
+## License
+
+[MIT License](LICENSE)
+
+---
+
+# Everes（日本語）
+
 並行するAIコーディング作業のTask Context Managerです。
 
 Claude Code / Codex など複数のAIエージェントで同時に進めている作業を、人間が記憶に頼らず把握するために使います。想定規模は常時10〜20の並行作業です。
@@ -25,41 +204,37 @@ conversationが長くなって新しいsessionへ引き継いでも、Taskは変
 
 ## 導入
 
-apmとcurlが必要です。CLIはdarwin/arm64向けのprebuilt binaryとして配布されるため、Go toolchainは不要です。
+apmが必要です。CLIはdarwin/arm64向けのprebuilt binaryとしてAPMパッケージに同梱されるため、Go toolchainは不要です。
 apmがない場合は、先に[APM公式の導入手順](https://microsoft.github.io/apm/getting-started/installation/)でインストールしてください。
 
-CLI本体と、Claude Code / Codex用のSkillとhookを同じrelease tagからインストールします。
+CLI本体と、Claude Code / Codex用のSkillとhookを同じrelease tagから一括でインストールします。
 
 ```bash
 EVERES_VERSION=v0.3.0
-curl -fsSL "https://raw.githubusercontent.com/tsuyukimakoto/everes/${EVERES_VERSION}/install.sh" | bash -s -- "$EVERES_VERSION"
 apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
-apm install -g "tsuyukimakoto/everes/.apm/packages/everes-claude-hook#${EVERES_VERSION}" --target claude
-apm install -g "tsuyukimakoto/everes/.apm/packages/everes-codex-hook#${EVERES_VERSION}" --target codex
 ```
 
-`~/bin` が `PATH` にない場合は、利用中のシェルの設定に追加してください。導入を確認します。
+CLIはSkill内に配置され、AgentとSessionStart hookから絶対パスで実行されます。導入を確認します。
 
 ```bash
-everes version
+"$HOME/.agents/skills/everes-task/bin/everes" version
 apm view -g tsuyukimakoto/everes
 ```
 
-APMパッケージは共通SkillとClaude Code / CodexそれぞれのSessionStart hookを配布します。Skillは `~/.agents/skills/`、hookは各エージェントのユーザー設定に配置されます。hookは配置先ごとに別パッケージとして導入します。
+APMパッケージはCLIを含む共通Skillと、Claude Code / CodexそれぞれのSessionStart hookを配布します。Skillは `~/.agents/skills/` と `~/.claude/skills/`、hookは各エージェントのユーザー設定に配置されます。
 
 ### 更新
 
 `EVERES_VERSION`を更新先のrelease tagにして、CLI本体とAPMパッケージを更新します。
 
 ```bash
-EVERES_VERSION=v0.2.1
-curl -fsSL "https://raw.githubusercontent.com/tsuyukimakoto/everes/${EVERES_VERSION}/install.sh" | bash -s -- "$EVERES_VERSION"
+EVERES_VERSION=v0.3.0
 apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
-apm install -g "tsuyukimakoto/everes/.apm/packages/everes-claude-hook#${EVERES_VERSION}" --target claude
-apm install -g "tsuyukimakoto/everes/.apm/packages/everes-codex-hook#${EVERES_VERSION}" --target codex
 ```
 
-更新後に `everes version` と `apm view -g tsuyukimakoto/everes` を実行し、CLIとAPMパッケージのバージョンを確認してください。
+更新後に `"$HOME/.agents/skills/everes-task/bin/everes" version` と `apm view -g tsuyukimakoto/everes` を実行し、CLIとAPMパッケージのバージョンを確認してください。
+
+ターミナルから `everes` を直接使う場合だけ、従来の `install.sh` で `~/bin/everes` に追加できます。Agentとhookの動作には不要です。
 
 Go moduleとして導入する場合は、Go 1.26以降を用意してrelease tagを指定します。
 

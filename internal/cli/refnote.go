@@ -25,9 +25,9 @@ func runRef(args []string) error {
 
 func runRefAdd(args []string) error {
 	fs := newFlagSet("ref add", os.Stderr)
-	title := fs.String("title", "", "参照のタイトル")
-	typeName := fs.String("type", "", "参照種別 (省略時はURLから推測)")
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	title := fs.String("title", "", "reference title")
+	typeName := fs.String("type", "", "reference type (inferred from the URL when omitted)")
+	asJSON := fs.Bool("json", false, "output JSON")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -129,7 +129,7 @@ func runNote(args []string) error {
 
 func runNoteAdd(args []string) error {
 	fs := newFlagSet("note add", os.Stderr)
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	asJSON := fs.Bool("json", false, "output JSON")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err

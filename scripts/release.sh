@@ -134,13 +134,18 @@ version_files=(
 
 versions_changed=false
 release_committed=false
+bundled_binary=".apm/skills/everes-task/bin/everes"
+binary_backup="$(mktemp)"
+cp "$bundled_binary" "$binary_backup"
 rollback_version_edits() {
   exit_status=$?
   if [ "$exit_status" -ne 0 ] && [ "$versions_changed" = true ] && [ "$release_committed" = false ]; then
     echo "Restoring version strings to v$current_version after failure..." >&2
     OLD_VERSION="$new_version" NEW_VERSION="$current_version" \
       perl -pi -e 's/\Q$ENV{OLD_VERSION}\E/$ENV{NEW_VERSION}/g' "${version_files[@]}"
+    install -m 0755 "$binary_backup" "$bundled_binary"
   fi
+  rm -f -- "$binary_backup"
   exit "$exit_status"
 }
 trap rollback_version_edits EXIT
@@ -152,10 +157,15 @@ versions_changed=true
 echo "Validating release v$new_version..."
 mise run check
 mise run build
+install -m 0755 build/everes "$bundled_binary"
 git diff --check
 
 if [ "$(./build/everes version)" != "$new_version" ]; then
   echo "error: built CLI version does not match $new_version" >&2
+  exit 1
+fi
+if [ "$("$bundled_binary" version)" != "$new_version" ]; then
+  echo "error: bundled CLI version does not match $new_version" >&2
   exit 1
 fi
 
@@ -189,5 +199,6 @@ fi
 gh run watch "$run_id" --exit-status
 gh release view "$release_tag"
 
+rm -f -- "$binary_backup"
 trap - EXIT
 echo "Published $release_tag"

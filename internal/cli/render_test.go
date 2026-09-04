@@ -44,15 +44,15 @@ func TestRenderListShowsTaskAndSessionsAsHierarchy(t *testing.T) {
 	for _, want := range []string{
 		"╭─ " + task.ShortID(tk.TaskID) + "  公開準備",
 		"│  Task  ACTIVE (2 sessions)",
-		"│  現在地: リリース候補を確認中",
-		"│  次: 公開前の確認項目を整理する",
+		"│  Current: リリース候補を確認中",
+		"│  Next: 公開前の確認項目を整理する",
 		"├─ Sessions  2 open",
 		"│  ┌─ ACTIVE  ↗ codex:実装",
-		"│  │  現在地: 署名済みbuildを作成中",
-		"│  │  次: archiveを検証する",
+		"│  │  Current: 署名済みbuildを作成中",
+		"│  │  Next: archiveを検証する",
 		"│  ┌─ WAITING  claude:レビュー",
-		"│  │  現在地: metadataの確認を依頼済み",
-		"│  │  再開: レビューが返ったら修正する",
+		"│  │  Current: metadataの確認を依頼済み",
+		"│  │  Resume: レビューが返ったら修正する",
 		"╰─",
 	} {
 		if !strings.Contains(got, want) {
@@ -90,7 +90,7 @@ func TestRenderListWrapsStagedFieldsToTerminalWidth(t *testing.T) {
 			t.Errorf("line width = %d; want <= 40:\n%s", got, line)
 		}
 	}
-	if !strings.Contains(out.String(), "│  現在地: 日本語の長い説明でもセッショ\n│          ンごとの範囲が分かるように") {
+	if !strings.Contains(out.String(), "│  Current: 日本語の長い説明でもセッショ\n│           ンごとの範囲が分かるように") {
 		t.Errorf("rendered list did not wrap task summary with continuation indent:\n%s", out.String())
 	}
 }
@@ -113,7 +113,7 @@ func TestRenderListCompactsDoneSessionsWithCompletionAndResumeCommand(t *testing
 	for _, want := range []string{
 		"├─ Sessions  1 open · 1 done",
 		"│  ✓ claude:調査 — 公開要件の確認を完了",
-		"│    復帰: everes session open " + task.ShortID(tk.TaskID) + " --provider claude --session-id 00000002",
+		"│    Reopen: everes session open " + task.ShortID(tk.TaskID) + " --provider claude --session-id 00000002",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("renderList() =\n%s\nwant substring %q", got, want)

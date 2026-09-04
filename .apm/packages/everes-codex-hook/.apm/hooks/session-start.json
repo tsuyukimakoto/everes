@@ -5,7 +5,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "\"$HOME/bin/everes\" hook session-start --provider codex",
+          "command": "\"$HOME/.agents/skills/everes-task/bin/everes\" hook session-start --provider codex",
           "timeout": 5
         }
       ]

@@ -24,36 +24,36 @@ import (
 // Version はリポジトリ内のビルド時に -ldflags で差し替える。
 var Version = "dev"
 
-const usage = `everes - 並行するAIコーディング作業のTask Context Manager
+const usage = `everes - Task Context Manager for parallel AI coding work
 
 usage:
   everes <command> [arguments]
 
 commands:
-  task create              Taskを作成し、現在のsessionへ紐付ける
-  task list                Taskを一覧する
-  task show <task-id>      Taskの詳細を表示する
-  task update <task-id>    Taskの状態を更新する
-  task done <task-id>      Taskを完了にする
+  task create              Create a Task and attach the current session
+  task list                List Tasks
+  task show <task-id>      Show Task details
+  task update <task-id>    Update a Task
+  task done <task-id>      Complete a Task
 
-  session current          現在のsessionに紐づくTaskを表示する
-  session list <task-id>   Taskに紐づくAgent sessionを確認する
-  session attach <task-id> 現在のsessionを既存Taskへ紐付ける
-  session update <task-id> Agent sessionの状態を更新する
-  session done <task-id>   現在のAgent sessionを完了にする
-  session detach <task-id> Agent sessionの紐付けを外す
-  session open <task-id>   Taskに紐づくAgent sessionを再開する
+  session current          Show the Task attached to the current session
+  session list <task-id>   List Agent Sessions attached to a Task
+  session attach <task-id> Attach the current session to an existing Task
+  session update <task-id> Update an Agent Session
+  session done <task-id>   Complete the current Agent Session
+  session detach <task-id> Detach an Agent Session
+  session open <task-id>   Resume an Agent Session attached to a Task
 
-  ref add <task-id> <url>       参照を追加する
-  ref remove <task-id> <ref-id> 参照を削除する
+  ref add <task-id> <url>        Add a reference
+  ref remove <task-id> <ref-id>  Remove a reference
 
-  note add <task-id> <text>      メモを追加する
-  note remove <task-id> <note-id> メモを削除する
+  note add <task-id> <text>       Add a note
+  note remove <task-id> <note-id> Remove a note
 
-  current                  session current の alias
-  version                  バージョンを表示する
+  current                  Alias for session current
+  version                  Show the version
 
-各コマンドの詳細は everes <command> -h を参照。
+Run everes <command> -h for command-specific help.
 `
 
 // Run はコマンドを実行し、プロセスの終了コードを返す。
@@ -74,7 +74,7 @@ func Run(args []string) int {
 	fmt.Fprintf(os.Stderr, "everes: %v\n", err)
 	if errors.Is(err, store.ErrRevisionConflict) {
 		fmt.Fprintln(os.Stderr,
-			"hint: 他のsessionが先に更新しています。everes task show で最新を確認してください。")
+			"hint: another session updated the Task first; run everes task show to inspect the latest state")
 	}
 	return 1
 }

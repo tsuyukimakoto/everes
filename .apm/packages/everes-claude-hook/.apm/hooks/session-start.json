@@ -5,7 +5,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "\"$HOME/bin/everes\" hook session-start --provider claude",
+          "command": "\"$HOME/.claude/skills/everes-task/bin/everes\" hook session-start --provider claude",
           "timeout": 5
         }
       ]

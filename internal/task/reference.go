@@ -123,12 +123,12 @@ func InspectSecrets(raw string) []string {
 	var warnings []string
 	for key := range u.Query() {
 		if secretParamRe.MatchString(key) {
-			warnings = append(warnings, fmt.Sprintf("query parameter %q が機密情報を含む可能性があります", key))
+			warnings = append(warnings, fmt.Sprintf("query parameter %q may contain sensitive information", key))
 		}
 	}
 	if u.User != nil {
 		if _, hasPassword := u.User.Password(); hasPassword {
-			warnings = append(warnings, "URLにパスワードが埋め込まれています")
+			warnings = append(warnings, "the URL contains an embedded password")
 		}
 	}
 	return warnings

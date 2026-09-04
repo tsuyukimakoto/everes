@@ -36,19 +36,19 @@ func runTask(args []string) error {
 
 func runTaskCreate(args []string) error {
 	fs := newFlagSet("task create", os.Stderr)
-	title := fs.String("title", "", "Taskのタイトル (必須)")
-	objective := fs.String("objective", "", "この作業が何を目的としているか")
-	summary := fs.String("summary", "", "現在どういう状態か")
-	nextAction := fs.String("next-action", "", "次に実際に行う作業")
-	resumeWhen := fs.String("resume-when", "", "いつこのTaskに戻ればよいか")
-	checkAt := fs.String("check-at", "", "waitingを次に確認するローカル日時")
-	checkAction := fs.String("check-action", "", "確認時刻を過ぎたら確認すること")
+	title := fs.String("title", "", "Task title (required)")
+	objective := fs.String("objective", "", "objective of the work")
+	summary := fs.String("summary", "", "current state")
+	nextAction := fs.String("next-action", "", "next concrete action")
+	resumeWhen := fs.String("resume-when", "", "condition for resuming the Task")
+	checkAt := fs.String("check-at", "", "local date and time for the next waiting check")
+	checkAction := fs.String("check-action", "", "action to perform when the check time arrives")
 	statusName := fs.String("status", string(task.StatusActive), "status (active, waiting, needs_me, paused, done)")
-	sessionID := fs.String("session-id", "", "紐付けるAgent sessionのID")
-	providerName := fs.String("provider", "", "紐付けるAgentのprovider (claude, codex)")
-	label := fs.String("label", "", "Agent sessionのラベル")
-	noAttach := fs.Bool("no-attach", false, "現在のsessionを紐付けない")
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	sessionID := fs.String("session-id", "", "Agent Session ID to attach")
+	providerName := fs.String("provider", "", "Agent provider to attach (claude, codex)")
+	label := fs.String("label", "", "Agent Session label")
+	noAttach := fs.Bool("no-attach", false, "do not attach the current session")
+	asJSON := fs.Bool("json", false, "output JSON")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -139,16 +139,16 @@ func runTaskCreate(args []string) error {
 	if attached != nil {
 		fmt.Printf("attached %s session %s\n", attached.Provider, attached.SessionID)
 	} else {
-		fmt.Println("現在のsessionは特定できませんでした。everes session attach で後から紐付けできます。")
+		fmt.Println("Could not identify the current session. Attach it later with everes session attach.")
 	}
 	return nil
 }
 
 func runTaskList(args []string) error {
 	fs := newFlagSet("task list", os.Stderr)
-	asJSON := fs.Bool("json", false, "JSONで出力する")
-	statusFilter := fs.String("status", "", "指定statusのみ表示する")
-	all := fs.Bool("all", false, "done を含めてすべて表示する")
+	asJSON := fs.Bool("json", false, "output JSON")
+	statusFilter := fs.String("status", "", "show only the specified status")
+	all := fs.Bool("all", false, "include completed Tasks")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -212,7 +212,7 @@ func listTerminalWidth() int {
 
 func runTaskShow(args []string) error {
 	fs := newFlagSet("task show", os.Stderr)
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	asJSON := fs.Bool("json", false, "output JSON")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -240,16 +240,16 @@ func runTaskShow(args []string) error {
 
 func runTaskUpdate(args []string) error {
 	fs := newFlagSet("task update", os.Stderr)
-	title := fs.String("title", "", "タイトルを変更する")
-	objective := fs.String("objective", "", "objectiveを変更する")
-	summary := fs.String("summary", "", "現在どういう状態かを更新する")
-	nextAction := fs.String("next-action", "", "次に行う作業を更新する")
-	resumeWhen := fs.String("resume-when", "", "再開条件を更新する")
-	checkAt := fs.String("check-at", "", "waitingを次に確認するローカル日時（空文字で消去）")
-	checkAction := fs.String("check-action", "", "確認時刻を過ぎたら確認すること（空文字で消去）")
-	statusName := fs.String("status", "", "statusを変更する")
-	revision := fs.Int("revision", 0, "この値と保存済みrevisionが一致する場合のみ更新する")
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	title := fs.String("title", "", "replace the title")
+	objective := fs.String("objective", "", "replace the objective")
+	summary := fs.String("summary", "", "replace the current-state summary")
+	nextAction := fs.String("next-action", "", "replace the next action")
+	resumeWhen := fs.String("resume-when", "", "replace the resume condition")
+	checkAt := fs.String("check-at", "", "replace the next local check time (empty string clears it)")
+	checkAction := fs.String("check-action", "", "replace the scheduled check action (empty string clears it)")
+	statusName := fs.String("status", "", "change the status")
+	revision := fs.Int("revision", 0, "update only when this value matches the stored revision")
+	asJSON := fs.Bool("json", false, "output JSON")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -274,7 +274,7 @@ func runTaskUpdate(args []string) error {
 	}
 
 	if len(set) == 0 || (len(set) == 1 && set["json"]) {
-		return errors.New("更新する項目を1つ以上指定してください")
+		return errors.New("specify at least one field to update")
 	}
 
 	s, err := openStore()
@@ -321,7 +321,7 @@ func runTaskUpdate(args []string) error {
 					hasTrackedSession = hasTrackedSession || session.Status != ""
 				}
 				if hasTrackedSession {
-					return errors.New("Agent SessionがあるTaskのstatusは集約値です。everes session updateを使ってください")
+					return errors.New("the status of a Task with Agent Sessions is an aggregate; use everes session update")
 				}
 				t.SetStatus(st)
 			}
@@ -338,7 +338,7 @@ func runTaskUpdate(args []string) error {
 
 	fmt.Printf("updated %s  status=%s  revision=%d\n", updated.TaskID, updated.Status, updated.Revision)
 	if updated.Status == task.StatusWaiting && !hasWaitingResumeCondition(updated) {
-		fmt.Println("hint: waiting では --resume-when、または --check-at と --check-action を記録しておくと再開判断ができます。")
+		fmt.Println("hint: for a waiting Task, record --resume-when or both --check-at and --check-action")
 	}
 	return nil
 }
@@ -374,7 +374,7 @@ func parseCheckAt(value string, location *time.Location) (time.Time, error) {
 
 func runTaskDone(args []string) error {
 	fs := newFlagSet("task done", os.Stderr)
-	asJSON := fs.Bool("json", false, "JSONで出力する")
+	asJSON := fs.Bool("json", false, "output JSON")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err

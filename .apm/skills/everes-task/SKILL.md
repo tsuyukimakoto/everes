@@ -1,266 +1,257 @@
 ---
 name: everes-task
 description: >
-  Everes（並行するAIコーディング作業のTask Context Manager）でTaskを作成・更新・参照するスキル。
-  「この作業をEveresで管理して」「Everesの状態を更新して」「このTaskをウェイティングにして」
-  「明日の9時までウェイティングにして、その時刻になったらCIを確認する」
-  「このIssueを関連付けて」「このドキュメントを関連付けて」「メモしておいて」
-  「この作業は完了」「いま何を抱えてる」「他に進行中の作業は」など、
-  作業の目的・進捗・待ち状態・次のアクション・関連リンクの記録や参照を求められたときに使用する。
-  waitingへの変更はEveres、Task、status、waiting、ウェイティングのいずれかが明示された場合に限る。
-  「レビュー待ちにして」など外部サービスの操作とも読める依頼だけではEveresを更新しない。
-  conversationが長くなって目的を見失った場合の現在地確認にも使う。
-  Everesのデータを直接編集してはならず、必ず everes CLI を経由すること。
+  Create, update, and inspect Tasks in Everes, a Task Context Manager for parallel AI coding work.
+  Use this skill when the user asks to manage work in Everes; record or inspect its objective, progress,
+  waiting state, next action, related links, or notes; mark work complete; or review current and other
+  ongoing work. Change a Task to waiting only when the user explicitly mentions Everes, Task, status,
+  waiting, or an equivalent term. A request such as "wait for review" may refer to an external service
+  and is not enough by itself to update Everes. Use this skill to regain context when a conversation has
+  become long. Never edit Everes data directly; always use the everes CLI.
 ---
 
 # everes-task
 
-Everesは、複数のAIコーディングエージェントで同時並行に進めている作業を、人間が記憶に頼らず管理するための道具です。
+Everes helps people track work running concurrently across multiple AI coding agents without relying on memory.
 
-管理の主体は **Task** です。Claude CodeのsessionやCodexのthreadは、そのTaskを実行するための **Agent Session** に過ぎません。
+These instructions are written in English, but communicate with the user in the user's language. Localize questions and option labels, and write Task titles, objectives, summaries, next actions, resume conditions, and notes in the language appropriate to the user's work unless the user requests otherwise.
 
-進捗、status、次の作業、再開条件、確認予定は現在のAgent Sessionへ記録します。TaskのstatusはAgent Sessionの集約値です。Taskの目的や共有情報はTaskへ、各conversationの現在地はAgent Sessionへ記録してください。
+The primary object is a **Task**. A Claude Code session or Codex thread is an **Agent Session** that works on a Task.
 
-conversationが長くなって先頭の目的が流れても、Everesを見れば作業の意味と状態が分かる状態を保つことが目的です。
+Store progress, status, next action, resume condition, and scheduled checks on the current Agent Session. A Task status is aggregated from its Agent Sessions. Store the objective and shared information on the Task, and the current position of each conversation on its Agent Session.
 
-## 絶対に守ること
+The goal is for Everes to preserve what the work is, where it stands, and what happens next even after the original request has scrolled out of the conversation.
 
-**`~/.everes/` 配下のJSONを直接読み書きしてはいけません。**
+## Non-negotiable rules
 
-必ず `everes` コマンドを経由してください。validation、排他制御、session mapping、schema migrationはすべてCLIが担っています。直接編集するとこれらが働かず、他のAgentとの同時更新でデータが壊れます。
+**Never read or write JSON files under `~/.everes/` directly.**
 
-**statusを推測で変更してはいけません。現在地のsnapshotは古いままにしません。**
+Always use the `everes` command. The CLI owns validation, locking, session mapping, and schema migration. Direct edits bypass those safeguards and may corrupt data when agents update it concurrently.
 
-`status` の変更、Taskの完了、objectiveの変更は、ユーザーが明示した場合だけ実行します。ただし、別sessionへの委譲を始めたときや、このsessionの担当内容が終わったと判断したときは、作業を終える前に「このsessionを waiting / paused / done のどれにするか」を短く確認してください。状態変更の確認をせず、古い `active` のまま放置してはいけません。
+**Never infer a status change, and never leave the current snapshot stale.**
 
-一方、すでにEveresで管理中のsessionについて、`summary` と `next_action` はconversationの現在地を示す置換可能なsnapshotです。実質的な進捗があった節目、別sessionへ委譲する前、長い作業の区切り、最終回答の前に内容が古くなっていれば、`everes session update` で更新してください。これは追記型の履歴ではありません。判断経緯や恒久的に残す情報だけをnoteに記録します。
+Change `status`, complete a Task, or change an objective only when the user explicitly requests or confirms it. When work has been delegated to another session, or this session's assignment appears complete, ask briefly whether this session should become `waiting`, `paused`, or `done` before ending the work. Do not leave an obsolete `active` status without asking.
 
-進捗がないのに文面だけを書き換えたり、毎ターン更新したりしてはいけません。wall clockによる定期実行はSkill単独では行えないため、「定期的」は意味のある作業区切りごとの更新として扱います。
+For a session already managed by Everes, `summary` and `next_action` are replaceable snapshots of the current conversation. Update them with `everes session update` when they become stale at a meaningful progress point, before delegating, at a long-work boundary, or before the final response. This is not an append-only history. Put only lasting decisions or rationale in notes.
 
-**「レビュー待ち」をEveres更新の合図にしてはいけません。**
+Do not rewrite snapshots without actual progress or update them every turn. The skill cannot run on a wall-clock schedule, so "periodically" means at meaningful work boundaries.
 
-「レビュー待ちにして」は、GitHubのIssueやPRに対する操作とも解釈できます。
-Everesの `waiting` へ変更するのは、ユーザーがEveres、Task、status、`waiting`、ウェイティングのいずれかを明示した場合だけです。
-曖昧な依頼ではEveresを更新せず、操作対象を確認してください。
+**Do not treat “waiting for review” as an instruction to update Everes.**
 
-## 前提の確認
+Such wording may request an operation on a GitHub issue or pull request. Set Everes to `waiting` only when the user explicitly refers to Everes, a Task, a status, waiting, or an equivalent term. If the target is ambiguous, ask what should be changed.
 
-`everes` コマンドが必要です。見つからない場合はユーザーに導入を依頼してください。
+## Prerequisites
+
+Use the `everes` CLI bundled by APM. Select the absolute path for the current provider. In every command example below, replace `everes` with the appropriate absolute path. Do not rely on the shell `PATH` or `~/bin/everes`.
+
+```text
+Claude Code: $HOME/.claude/skills/everes-task/bin/everes
+Codex:       $HOME/.agents/skills/everes-task/bin/everes
+```
+
+If the corresponding file is missing, ask the user to install the APM package.
 
 ```bash
 everes version
 ```
 
-SessionStart contextに次の形式でproviderとsession IDがある場合は、その値をCLIへ明示的に渡してください。
+When SessionStart context includes the provider and session ID in either form below, pass those values explicitly to the CLI.
 
 ```text
-[Everes] このsession (codex <session-id>) ...
-[Everes] このsession (claude <session-id>) ...
+[Everes] This session (codex <session-id>) ...
+[Everes] This session (claude <session-id>) ...
 ```
 
-同じ作業ディレクトリで複数sessionを開いている場合、更新日時による自動検出では現在のsessionを区別できません。
-contextに値があるのに自動検出へ切り替えてはいけません。
+Timestamp-based auto-detection cannot distinguish concurrent sessions in the same working directory. Never fall back to auto-detection when the context contains explicit values.
 
-未登録sessionのSessionStart contextを受け取った場合は、新しいsessionの最初の応答で通常の依頼を進める前に、Taskへ紐付けるかをユーザーに確認してください。
-最初のユーザーメッセージと未完了Task候補のtitle、objective、summary、next action、resume whenを比較し、明確に合う既存Taskがあれば1件を「推奨」と表示します。推奨以外も含め、未完了Taskはすべて選択肢に残してください。
-同じユーザーメッセージから作業を端的に表す新規Taskタイトルを1件提案し、「提案タイトルで新規Taskを作成」「ユーザーが入力するタイトルで新規Taskを作成」「どれにも紐付けない」を選択肢に含めます。未完了Taskがない場合は「新しいTaskを作りますか？」と確認し、この3つを提示してください。Task IDの入力を求めてはいけません。
-既存Taskが選択された場合だけ、contextにある対応するTask ID、provider、session IDを使って `everes session attach` を実行します。新規Taskが選択された場合だけ、提案したtitleまたはユーザーが入力したtitleで、現在のsessionへ紐づくTaskを作成します。
-選択前にTaskを作成、更新、紐付けしてはいけません。
+When SessionStart reports an unregistered session, ask how to attach it to a Task in the first response, before proceeding with the ordinary request. Compare the first user message with every unfinished candidate's title, objective, summary, next action, and resume condition. Mark one existing Task as **Recommended** when it clearly matches, but keep every unfinished Task available.
 
-## ユーザーの依頼と操作の対応
+Also propose one concise new Task title based on the first user message. Include options to create a Task with the proposed title, create one with a title entered by the user, or leave the session unattached. If no unfinished Tasks exist, ask whether to create a new Task and present those same three options. Never ask the user to type a Task ID.
 
-### 「この作業をEveresで管理して」
+Run `everes session attach` only after the user selects an existing Task, using the Task ID, provider, and session ID from context. Create a new Task only after the user selects a new-Task option. Do not create, update, or attach anything before the selection.
 
-新しいTaskを作成し、現在のsessionへ紐付けます。
+## Map user requests to operations
 
-conversationからtitleとobjectiveの候補を組み立ててから実行してください。**AIが推測してよいのは初期値のみ**です。
+### “Manage this work in Everes”
+
+Create a Task and attach the current session. Derive an initial title and objective from the conversation. **The agent may infer initial values only.**
 
 ```bash
 everes task create \
-  --title "認証方式の変更" \
-  --objective "既存認証方式を整理しOAuthベースの認証方式へ移行する" \
+  --title "Change the authentication method" \
+  --objective "Replace the existing authentication method with an OAuth-based flow" \
   --provider <provider> \
   --session-id <session-id>
 ```
 
-providerとsession IDはSessionStart contextの値を使います。
-contextに値がない場合に限り、現在のsessionが自動検出されます。
-workspace（cwd、git remote、branch）は自動取得されます。
+Use the provider and session ID from SessionStart context. Use auto-detection only when context does not contain them. The CLI captures workspace information such as cwd, Git remote, branch, and worktree automatically.
 
-作成後、titleとobjectiveが意図と合っているかユーザーに確認してください。
+After creation, show the title and objective and ask whether they match the user's intent.
 
-### 「いまの状態を更新して」
+### “Update the current state”
 
-conversationの現在状況を要約し、以下を更新します。
+Summarize the conversation's current state and update the session.
 
 ```bash
 everes session update <task-id> \
   --status waiting \
-  --summary "OAuth実装とunit testまで完了。PRを作成してレビュー待ち。" \
-  --next-action "レビュー指摘を反映してintegration testを実行する" \
-  --resume-when "PR #381 にレビューが付いたら"
+  --summary "OAuth implementation and unit tests are complete; the pull request is awaiting review." \
+  --next-action "Address review feedback and run integration tests" \
+  --resume-when "PR #381 receives a review"
 ```
 
-各項目は意味が異なります。混ぜないでください。
+Keep the fields distinct.
 
-| 項目 | 意味 | 例 |
+| Field | Meaning | Example |
 | --- | --- | --- |
-| `--summary` | 現在どういう状態なのか | OAuth実装とunit testまで完了。PRレビュー待ち。 |
-| `--next-action` | 次に実際に行う作業 | レビュー指摘を反映してintegration testを実行する |
-| `--resume-when` | いつこのTaskに戻ればよいか | PR #381 にレビューが付いたら |
-| `--check-at` | waitingを次に確認するローカル日時 | 2026-08-17 09:00 |
-| `--check-action` | その時刻を過ぎたら確認すること | PR #381のレビュー状況を確認する |
+| `--summary` | Current state | OAuth implementation and unit tests are complete; review is pending |
+| `--next-action` | Concrete next action | Address review feedback and run integration tests |
+| `--resume-when` | Condition for returning | PR #381 receives a review |
+| `--check-at` | Local date and time for the next check | 2026-08-17 09:00 |
+| `--check-action` | What to inspect after that time | Check the review status of PR #381 |
 
-この更新は過去の記録への追記ではなく、現在のAgent Sessionのsnapshotを置き換えます。`summary` には「このsessionが何を担当し、どこまで終わり、いまどうなっているか」を短く記述し、一覧だけで現在地を判断できるようにしてください。
+This replaces the current Agent Session snapshot; it does not append history. Keep `summary` short but sufficient to show what this session owns, what it completed, and where it now stands.
 
-## 作業中のsnapshotとstatus確認
+## Snapshot and status checks during work
 
-Everesに紐づくsessionで作業している間は、次の節目で現在のsessionの `summary` と `next_action` がconversationと一致しているか確認します。
+While working in an attached session, verify that `summary` and `next_action` still match the conversation at these points:
 
-- 検証が通る、実装方針が確定するなど、現在地が変わったとき
-- 別のAgent Sessionへ仕事を委譲する直前
-- 長い作業をいったん区切るとき
-- 最終回答を返す前
+- The current position changes, such as after tests pass or an implementation approach is settled
+- Immediately before delegating work to another Agent Session
+- At a boundary in a long-running task
+- Before the final response
 
-古くなっていれば、statusは変えずに `everes session update` でsnapshotを置き換えます。更新内容には、完了したこと、残っていること、次に行う具体的な作業を含めます。
+If stale, replace the snapshot with `everes session update` without changing the status. Include what is complete, what remains, and the next concrete action.
 
-次の場合はstatusを自動変更せず、その場でユーザーに短く確認します。
+Do not change status automatically in these cases; ask the user briefly:
 
-- 別sessionへ委譲し、このsession側に実行中の作業が残っていない: `waiting`、`paused`、`done` のどれにするか
-- このsessionの担当内容を終えた: sessionを `done` にするか
-- Task全体の目的を達成した: Taskを `done` にするか
+- Work was delegated and this session has nothing left in progress: ask whether it should be `waiting`, `paused`, or `done`
+- This session's assignment is complete: ask whether to mark the session `done`
+- The whole Task objective is complete: ask whether to mark the Task `done`
 
-ユーザーが同じ発言でstatusを指定している場合は、重ねて確認せず、その指定どおり更新します。
+If the user specifies the status in the same message, apply it without asking again.
 
-### 「このTaskをEveresでウェイティングにして」
+### “Set this Task to waiting in Everes”
 
-statusと再開条件を設定します。`waiting` では、イベントを待つ場合は `--resume-when`、指定時刻に確認する場合は `--check-at` と `--check-action` を記録してください。何待ちなのか、何を確認するのかが分からないTaskは一覧で役に立ちません。
+Set the status and resume condition. For event-based waiting, record `--resume-when`. For a scheduled check, record both `--check-at` and `--check-action`. A waiting Task is not useful if the list cannot show what it awaits or what must be checked.
 
 ```bash
-everes session update <task-id> --status waiting --resume-when "レビューが返ってきたら" --provider <provider> --session-id <session-id>
+everes session update <task-id> --status waiting --resume-when "The review is returned" --provider <provider> --session-id <session-id>
 ```
 
-ローカル日時を指定された場合は、実行環境のtimezoneを使って年月日と時刻を確定し、確認内容と一緒に設定してください。
+Resolve a user-supplied local date and time in the environment's timezone and record the action to perform.
 
 ```bash
 everes session update <task-id> \
   --status waiting \
   --check-at "2026-08-17 09:00" \
-  --check-action "PR #381のレビュー状況を確認する" \
+  --check-action "Check the review status of PR #381" \
   --provider <provider> \
   --session-id <session-id>
 ```
 
-相対表現の日付は現在のローカル日時から解決してください。日時を一意に決められない場合はユーザーに確認します。
-`--check-at` だけを設定してはいけません。確認時刻を過ぎてもstatusは `waiting` のままで、`everes task list` の `WAITING — CHECK NOW` に表示されます。
-確認を終えてTaskを再開または再度waitingにするときは、ユーザーの指示に従ってstatusまたは次の確認日時を更新してください。
+Resolve relative dates from the current local date and time. Ask when a unique timestamp cannot be determined. Never set `--check-at` without `--check-action`. Passing the check time does not change `waiting`; the Task appears under `WAITING — CHECK NOW`. After checking, follow the user's instruction to resume the Task or schedule another check.
 
-statusは以下のいずれかです。
+Allowed statuses:
 
-| status | 意味 |
+| Status | Meaning |
 | --- | --- |
-| `active` | 現在作業を進めている |
-| `waiting` | 外部要因待ち（CI、レビュー、他人の回答、仕様確定） |
-| `needs_me` | AI側では進められず、人間の判断や操作が必要 |
-| `paused` | 意図的に作業を止めている |
-| `done` | 目的達成済み |
+| `active` | Work is in progress |
+| `waiting` | Waiting for an external event such as CI, review, another person, or a specification decision |
+| `needs_me` | Human judgment or action is required |
+| `paused` | Work was intentionally suspended |
+| `done` | The objective has been achieved |
 
-### 「このIssueを関連付けて」「このドキュメントを関連付けて」
+### “Attach this issue/document”
 
-URLを参照として追加します。種別はURLから自動判定されます。
-
-```bash
-everes ref add <task-id> https://github.com/example/foo/issues/381 --title "認証方式変更"
-```
-
-URLのquery parameterにtokenらしき値が含まれる場合、CLIが警告を出します。警告が出たらユーザーに伝え、そのURLを登録してよいか確認してください。
-
-### 「メモしておいて」
-
-判断の経緯など、後から読み返したい内容を記録します。
+Add its URL as a reference. The CLI infers the reference type from the URL.
 
 ```bash
-everes note add <task-id> -- refresh tokenについてはA案を採用した
+everes ref add <task-id> https://github.com/example/foo/issues/381 --title "Authentication change"
 ```
 
-メモ本文にハイフンで始まる語が含まれる場合に備え、`--` で本文の開始を示してください。
+If the CLI warns that a query parameter may contain a token or secret, relay the warning and ask before storing the URL.
 
-### 「この作業は完了」
+### “Make a note of this”
+
+Record lasting rationale or information that should be available later.
+
+```bash
+everes note add <task-id> -- Use approach A for refresh tokens
+```
+
+Use `--` to mark the start of note text so words beginning with a hyphen remain intact.
+
+### “This work is complete”
 
 ```bash
 everes task done <task-id>
 ```
 
-Taskの完了はTaskに紐づく全Agent Sessionをdoneにします。一つのsessionだけを終了する場合は `everes session done <task-id> --provider <provider> --session-id <session-id>` を使います。
+Completing a Task marks all attached Agent Sessions done. To complete only one session, run `everes session done <task-id> --provider <provider> --session-id <session-id>`.
 
-### 「いま何を抱えてる」「他に進行中の作業は」
+### “What am I working on?”
 
 ```bash
 everes task list
 ```
 
-statusごとにグルーピングされ、`needs_me` から順に表示されます。完了済みは既定で隠れます。すべて見る場合は `--all` を付けます。
+Tasks are grouped by status, starting with `needs_me`. Completed Tasks are hidden by default; pass `--all` to include them.
 
-### 「この作業の現在地を教えて」
+### “Where does this work stand?”
 
-現在のsessionに紐づくTaskを表示します。
+Show the Task attached to the current session.
 
 ```bash
 everes session current --provider <provider> --session-id <session-id>
 ```
 
-conversationが長くなって目的を見失ったときは、まずこれを実行してください。
+Run this first when a long conversation has obscured the original objective.
 
-### 「このTaskに紐づくsessionを確認して」
+### “Show the sessions attached to this Task”
 
 ```bash
 everes session list <task-id> --json
 ```
 
-`last_seen_at` はEveresへ最後に紐付けた時刻であり、Agentが現在実行中であることを表しません。
-provider側の保存状態は `exists` と `metadata` を使って説明してください。
-保存ファイルの更新時刻だけで実行中、待機中、完了を推測してはいけません。
+`last_seen_at` is when Everes last attached or observed the session; it does not mean the agent is currently running. Use provider state from `exists` and `metadata`. Never infer running, waiting, or completion from a saved file's modification time.
 
-## 別のsessionを参照・操作する
+## Inspecting and operating another session
 
-ユーザーが別のAgent Sessionの状態確認を求めた場合は、先に `everes session list <task-id> --json` で対象を特定してください。
+When the user asks about another Agent Session, first identify it with `everes session list <task-id> --json`.
 
-Codexアプリにthread参照機能がある場合は、対象のCodex thread IDを指定して履歴と状態を読み取ります。
-Codexアプリで対象を画面表示するよう求められた場合は、アプリのtask移動機能へthread IDを渡してください。
-CLIから表示する場合は `everes session open <task-id> --app --session-id <session-id>` を使います。`everes task list` の `↗ codex:<label>` も同じCodex deep linkを開きます。
-Claude DesktopとClaude Code CLIは別のsession履歴を持ちます。Everesに紐づくClaude CLI sessionは `everes session open <task-id> --provider claude --session-id <session-id>` でCLIへ再開します。`task list` に表示される同じコマンドを案内してください。Claude Desktopの既存sessionへ直接移動できると説明してはいけません。
-EveresのAgent Session `status` はそのconversationで進める作業の状態です。Task `status` はAgent Session statusの集約値です。どちらもCodexアプリの `active`、`idle`、`notLoaded` などの実行状態とは別物として説明してください。
-Claude Codeの独立sessionについてEveresが提供できるのは、session記録の存在と更新時刻までです。
-Claude Agent Teams内であれば、teamのtask状態やteammateの情報はAgent Teamsの機能で確認します。
+If the Codex app provides thread inspection, read the target thread by ID. If the user asks to show it, use the app's task navigation with that thread ID. From the CLI, run `everes session open <task-id> --app --session-id <session-id>`. The `↗ codex:<label>` link in `everes task list` opens the same deep link.
 
-### 別のsessionへ依頼を送る場合
+Claude Desktop and Claude Code CLI keep separate session histories. Resume an attached Claude CLI session with `everes session open <task-id> --provider claude --session-id <session-id>` and give the user the same command shown by `task list`. Never claim that Everes can navigate directly to an existing Claude Desktop session.
 
-別sessionへの送信は、ユーザーが宛先と依頼内容を明示した場合だけ行ってください。
-これは通知の記録ではなく、対象sessionへ新しいユーザー指示を追加してAgentの処理を開始する操作です。
+An Everes Agent Session `status` describes the work assigned to that conversation. A Task `status` is the aggregate of Agent Session statuses. Both are separate from provider runtime states such as Codex app `active`, `idle`, or `notLoaded`.
 
-- Codexアプリで別taskへの送信機能が利用できる場合は、対象threadを必要に応じて読み取ってから、その機能でfollow-up promptを送る
-- Claude Agent Teams内のteammateには `SendMessage` を使う
-- Agent Teamsに属さないClaude sessionへ明示的に実行を依頼する場合は `claude -p --resume <session-id> <prompt>` を使う
+For an independent Claude Code session, Everes can report only whether the saved session exists and when it was last modified. Inside Claude Agent Teams, use Agent Teams facilities to inspect team tasks and teammates.
 
-対象が複数ある場合は、label、provider、session IDを提示してユーザーに宛先を確認してください。
-実行環境に送信機能がない場合は、利用できないことを伝え、`everes session open <task-id>` で対話的に再開する方法を案内してください。
-Everesに独自のmailboxがあるかのように振る舞ってはいけません。
+### Sending a request to another session
 
-## 新しいsessionへの引き継ぎ
+Send only when the user explicitly specifies both the destination and the request. This operation adds a new user instruction to the target session and starts agent processing; it is not a mailbox note.
 
-conversationが長くなって新しいsessionへ移った場合、既存Taskへ現在のsessionを追加します。Taskは変わりません。
+- In the Codex app, inspect the target thread when needed and use the app's follow-up-message facility
+- In Claude Agent Teams, use `SendMessage`
+- For an independent Claude Code session, use `claude -p --resume <session-id> <prompt>` when the user explicitly asks it to perform work
 
-SessionStart contextに未完了Task候補が提示されている場合は、ユーザーが番号またはタイトルを選ぶだけで、対応するTaskへ追加します。
-候補にないTaskを指定された場合に限り、Task一覧から対象を探します。
+If multiple destinations match, show their labels, providers, and session IDs and ask the user to choose. If the environment cannot send messages, say so and offer `everes session open <task-id>` for interactive resumption. Never imply that Everes has its own mailbox.
+
+## Handing off to a new session
+
+When a long conversation moves to a new session, attach the new session to the existing Task. Do not create a replacement Task.
+
+If SessionStart context already lists unfinished candidates, let the user select one by number or title. Search the Task list only when the requested Task is not among the candidates.
 
 ```bash
 everes session attach <task-id> \
-  --label "レビュー修正" \
+  --label "Address review feedback" \
   --provider <provider> \
   --session-id <session-id>
 ```
 
-誤ったsessionを紐付けた場合は、providerとsession IDを明示して外します。provider側のconversationは削除されません。
+If the wrong session was attached, detach it using an explicit provider and session ID. This does not delete the provider conversation.
 
 ```bash
 everes session detach <task-id> \
@@ -268,11 +259,11 @@ everes session detach <task-id> \
   --session-id <session-id>
 ```
 
-旧sessionは削除されません。1つのTaskに複数のAgent Sessionが並存してよい設計です。
+Old sessions remain attached. Multiple Agent Sessions may coexist on one Task.
 
-## machine-readable出力
+## Machine-readable output
 
-判断のために構造化データが必要な場合は `--json` を使ってください。
+Use `--json` when structured data is required for a decision.
 
 ```bash
 everes session current --json
@@ -281,19 +272,19 @@ everes task show <task-id> --json
 everes task list --json
 ```
 
-## task-idの指定
+## Task IDs
 
-task-idは先頭8文字などの前方一致で指定できます。曖昧な場合はCLIが候補を示してエラーになります。
+A unique prefix such as the first eight characters is accepted. An ambiguous prefix produces an error with matching candidates.
 
 ```bash
 everes task show 01M04EKP
 ```
 
-## 更新が競合したとき
+## Revision conflicts
 
-`revision conflict` が出た場合、他のsessionが先に更新しています。`everes task show` で最新を確認してから、上書きしてよいかユーザーに判断を仰いでください。黙って再実行してはいけません。
+When the CLI reports `revision conflict`, another session updated the Task first. Read the latest state with `everes task show`, then ask whether the user wants to overwrite it. Never retry silently.
 
-## コマンド一覧
+## Command reference
 
 ```text
 everes task create --title <title> [--objective ...] [--status ...] [--provider ...] [--session-id ...] [--no-attach]
@@ -317,4 +308,4 @@ everes note add <task-id> -- <text>
 everes note remove <task-id> <note-id>
 ```
 
-`everes hook session-start` はSessionStart hookが使う内部コマンドです。呼ばないでください。
+`everes hook session-start` is an internal SessionStart hook command. Do not invoke it manually.

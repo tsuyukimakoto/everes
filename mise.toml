@@ -3,7 +3,7 @@
 # 想定フロー:
 #   mise run check     # fmt / vet / test
 #   mise run install   # ~/bin/everes へ配置
-#   mise run deploy    # apm で Skill と hook を配布
+#   mise run deploy    # apm でCLI、Skill、hookを配布
 #   mise run dev-setup # 開発用にCLIとSkillをsourceへリンク
 
 [tools]
@@ -55,15 +55,12 @@ esac
 '''
 
 [tasks.deploy]
-description = "apm で Skill と hook を Claude / Codex へ配布"
+description = "apm でCLI、Skill、hookを Claude / Codex へ配布"
 shell = "bash -c"
 run = '''
 set -euo pipefail
-# root は Skill のみ。hook は配置先（claude/codex）ごとに別パッケージ・別 target で導入する。
-# --target は依存グラフ全体に適用されるため、1コマンドにまとめると両配置先に二重登録される。
+# hook packageはapm.ymlの依存関係に含まれ、per-dependency targetsで配布先を分ける。
 apm install -g "$(pwd)" --target claude,codex
-apm install -g "$(pwd)/.apm/packages/everes-claude-hook" --target claude
-apm install -g "$(pwd)/.apm/packages/everes-codex-hook" --target codex
 '''
 
 [tasks.dev-link]

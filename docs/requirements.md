@@ -475,7 +475,7 @@ Claude session start/resume
         ↓
 SessionStart Hook
         ↓
-"$HOME/bin/everes" hook session-start --provider claude
+"$HOME/.claude/skills/everes-task/bin/everes" hook session-start --provider claude
         ↓
 Claude session IDを取得
         ↓
@@ -549,7 +549,7 @@ SessionStart HookはCodexにも配布する。
 Codex用hookは次のコマンドを実行する。
 
 ```text
-"$HOME/bin/everes" hook session-start --provider codex
+"$HOME/.agents/skills/everes-task/bin/everes" hook session-start --provider codex
 ```
 
 ClaudeとCodexは共通するhook入力フィールドを持つため、入力形式からproviderを推測しない。
@@ -831,16 +831,16 @@ NEEDS ME
 
 ╭─ 01K2N86E2AS3  認証API変更
 │  Task  NEEDS ME (2 sessions) · 12 min ago
-│  現在地: レビュー指摘への対応が必要
-│  次: 指摘内容を確認して修正する
-│  参照: GitHub #381
+│  Current: レビュー指摘への対応が必要
+│  Next: 指摘内容を確認して修正する
+│  References: GitHub #381
 ├─ Sessions  1 open · 1 done
 │  ┌─ NEEDS_ME  codex:修正
-│  │  現在地: 指摘内容を確認中
-│  │  次: 修正してテストする
+│  │  Current: 指摘内容を確認中
+│  │  Next: 修正してテストする
 │  └─
 │  ✓ claude:調査 — 影響範囲の確認完了
-│    復帰: everes session open 01K2N86E2AS3 --provider claude --session-id 00000002
+│    Reopen: everes session open 01K2N86E2AS3 --provider claude --session-id 00000002
 ╰─
 
 
@@ -848,12 +848,12 @@ WAITING
 
 ╭─ 01K2N86E2BT4  通知基盤変更
 │  Task  WAITING (1 session) · 2 days ago
-│  現在地: API仕様確定待ち
-│  再開: Issue #422が確定したら
+│  Current: API仕様確定待ち
+│  Resume: Issue #422が確定したら
 ├─ Sessions  1 open
 │  ┌─ WAITING  codex:実装
-│  │  現在地: API案を作成済み
-│  │  再開: Issue #422が確定したら再開
+│  │  Current: API案を作成済み
+│  │  Resume: Issue #422が確定したら再開
 │  └─
 ╰─
 
@@ -862,15 +862,15 @@ ACTIVE
 
 ╭─ 01K2N86E2CU5  動画export高速化
 │  Task  ACTIVE (2 sessions) · 34 min ago
-│  現在地: Metal encoder周辺を調査中
-│  次: Instrumentsでボトルネックを確認する
+│  Current: Metal encoder周辺を調査中
+│  Next: Instrumentsでボトルネックを確認する
 ├─ Sessions  2 open
 │  ┌─ ACTIVE  codex:計測
-│  │  現在地: encoderを計測中
-│  │  次: ボトルネックを特定する
+│  │  Current: encoderを計測中
+│  │  Next: ボトルネックを特定する
 │  └─
 │  ┌─ PAUSED  claude:資料調査
-│  │  現在地: 関連資料を整理済み
+│  │  Current: 関連資料を整理済み
 │  └─
 ╰─
 ```
@@ -949,7 +949,7 @@ Agent Sessionごとに再開手段を提示する。専用UIではボタンと�
 CLIでは再開コマンドを案内する。
 
 ```text
-再開: everes session open <短縮task-id>
+Resume: everes session open <短縮task-id>
 ```
 
 ---
@@ -1367,7 +1367,8 @@ everes/
 ├── .apm/
 │   ├── skills/
 │   │   └── everes-task/
-│   │       └── SKILL.md
+│   │       ├── SKILL.md
+│   │       └── bin/everes             # darwin/arm64 prebuilt CLI
 │   └── packages/
 │       ├── everes-claude-hook/
 │       │   ├── apm.yml
@@ -1420,15 +1421,21 @@ description: 並行するAIコーディング作業のTask Context Manager
 targets:
   - claude
   - codex
+dependencies:
+  apm:
+    - path: ./.apm/packages/everes-claude-hook
+      targets: [claude]
+    - path: ./.apm/packages/everes-codex-hook
+      targets: [codex]
 ```
 
 `targets` はパッケージ側からの制限として働く。consumer側で有効なtargetとの積集合が実際の配布先になる。
 
 共通skillはルートパッケージに置く。
 
-hookはproviderを固定する必要があるため、`target: claude` と `target: codex` を指定した独立したローカルパッケージに分ける。
+hookはproviderを固定する必要があるため、独立したローカルパッケージに分ける。ルートpackageからper-dependency `targets` 付きで参照し、1回のinstallでそれぞれのproviderにだけ配布する。
 
-APM 0.28.0では、ルートのローカルパッケージからtarget固有のローカル依存を宣言すると、依存解決後の統合でhookパッケージがスキップされた。したがって、hookパッケージはそれぞれ直接installする。
+CLI本体はSkill bundle内の `bin/everes` に同梱する。APMのtop-level `bin/` 配布はClaude Codeのglobal pluginに限定され、Codexや通常のshell PATHには配布されないため使用しない。
 
 ## 配布先
 
@@ -1436,13 +1443,13 @@ apmが以下へ配置する。Everesはこのパスを知らない。
 
 | primitive | source | claude | codex |
 | --- | --- | --- | --- |
-| skill | `.apm/skills/everes-task/SKILL.md` | `~/.claude/skills/everes-task/` | `~/.agents/skills/everes-task/` |
+| skill + CLI | `.apm/skills/everes-task/` | `~/.claude/skills/everes-task/` | `~/.agents/skills/everes-task/` |
 | Claude hook | `.apm/packages/everes-claude-hook/.apm/hooks/session-start.json` | `~/.claude/settings.json` へマージ | 配布しない |
 | Codex hook | `.apm/packages/everes-codex-hook/.apm/hooks/session-start.json` | 配布しない | `~/.codex/hooks.json` へマージ |
 
 hookはAPMが受け付けるClaude形式のJSONで記述する。
 
-各hookパッケージの `target` が配布先を制限し、commandの `--provider` を固定する。hookはアプリ起動時の `PATH` に依存しないよう、`"$HOME/bin/everes"` を実行する。
+各hook dependencyの `targets` が配布先を制限し、commandの `--provider` を固定する。hookはアプリ起動時の `PATH` に依存しないよう、配布先Skill内の `bin/everes` を絶対パスで実行する。
 
 apmはtargetごとにevent名を正規化し、`${PLUGIN_ROOT}` 等のパス変数を書き換える。
 
@@ -1450,22 +1457,19 @@ apmは `.claude/apm-hooks.json` を台帳として持ち、各エントリに `_
 
 ## 導入手順
 
-CLI本体はapmでは配布できない。apmが扱うのはskillとhookのみである。
+公開版はCLI本体をSkill bundleへ同梱するため、apmだけでCLI、Skill、hookを導入できる。
 
 ```text
-mise run install                                  # go build → ~/bin/everes
-mise run deploy                                   # Skillと2種類のhookを配布
+mise run deploy                                   # CLI、Skill、2種類のhookを配布
 ```
 
-`mise run deploy` は以下の3コマンドを順に実行する。
+`mise run deploy` は以下のコマンドを実行する。
 
 ```text
 apm install -g <everes-repo-path> --target claude,codex
-apm install -g <everes-repo-path>/.apm/packages/everes-claude-hook --target claude
-apm install -g <everes-repo-path>/.apm/packages/everes-codex-hook --target codex
 ```
 
-`apm install -g` は各ローカルパッケージの絶対パスを `~/.apm/apm.yml` に記録する。
+`apm install -g` はルートpackageの絶対パスを `~/.apm/apm.yml` に記録する。hook packageはルートpackageの依存関係として解決される。
 
 リポジトリを移動した場合は再installが必要になる。
 
