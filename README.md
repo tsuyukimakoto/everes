@@ -159,7 +159,9 @@ Run the release task on `main`:
 mise run release
 ```
 
-It runs checks and a build, shows the current version and pending changes, then asks for a new version. Press Enter to accept the next patch version. After input, it updates version references, validates again, commits, creates an annotated tag, atomically pushes `main` and the tag, waits for GitHub Actions, and verifies the GitHub Release. It stops at the first failed command and restores version edits and the bundled binary when failure occurs before the release commit.
+It runs checks and a build, shows the current version and pending changes, then asks for a new version. Press Enter to accept the next patch version. After input, it updates version references, validates again, signs the darwin/arm64 CLI with Developer ID and the Hardened Runtime, submits it to Apple's notary service, and verifies Gatekeeper acceptance. Only then does it update the bundled APM binary, commit, create an annotated tag, atomically push `main` and the tag, wait for GitHub Actions, and verify the GitHub Release. It stops at the first failed command and restores version edits and the bundled binary when failure occurs before the release commit.
+
+The release Mac must provide the Developer ID Application identity and a valid `notarytool` Keychain profile. The repository defaults are the Everes G2 certificate fingerprint and the `everes-notary` profile. Set `EVERES_CODESIGN_IDENTITY`, `EVERES_CODESIGN_IDENTIFIER`, or `EVERES_NOTARYTOOL_PROFILE` only when those values change. A standalone executable cannot carry a stapled ticket, so Gatekeeper obtains its notarization ticket from Apple online.
 
 ## Limitations
 
@@ -340,7 +342,9 @@ mise run build
 mise run release
 ```
 
-versionを入力すると、version表記の更新、再検証、commit、annotated tagの作成、mainとtagのatomic pushを順に実行します。tag pushで起動したGitHub Actionsを待ち、GitHub Releaseを確認できた場合に完了します。途中のcommandが失敗した場合はそこで停止します。commit前の失敗では、書き換えたversion表記を元に戻します。
+versionを入力すると、version表記の更新、再検証、Developer ID署名、Hardened Runtimeとsecure timestampの確認、Appleへのnotarization、Gatekeeper評価を順に実行します。すべて成功した同一バイナリをAPMへ同梱してから、commit、annotated tagの作成、mainとtagのatomic pushへ進みます。tag pushで起動したGitHub Actionsは同梱済みバイナリを再ビルドせずGitHub Releaseへ掲載します。途中のcommandが失敗した場合はそこで停止します。commit前の失敗では、書き換えたversion表記と同梱バイナリを元に戻します。
+
+公開を実行するMacには、Everes用の `Developer ID Application` 証明書と秘密鍵、および `everes-notary` という `notarytool` のキーチェーンprofileが必要です。単体実行ファイルにはticketをstapleできないため、GatekeeperはAppleからnotarization ticketをオンラインで取得します。
 
 ## 制約
 

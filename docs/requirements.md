@@ -1459,6 +1459,8 @@ apmは `.claude/apm-hooks.json` を台帳として持ち、各エントリに `_
 
 公開版はCLI本体をSkill bundleへ同梱するため、apmだけでCLI、Skill、hookを導入できる。
 
+同梱するdarwin/arm64 CLIは `Developer ID Application` で署名し、Hardened Runtimeとsecure timestampを有効にする。Appleのnotary serviceが `Accepted` を返し、Gatekeeperの実行評価が成功した同一バイナリだけをSkill bundleとGitHub Releaseへ配置する。単体実行ファイルにはnotarization ticketをstapleできないため、GatekeeperはAppleがオンラインで公開するticketを参照する。
+
 ```text
 mise run deploy                                   # CLI、Skill、2種類のhookを配布
 ```

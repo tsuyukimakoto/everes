@@ -8,8 +8,8 @@ usage() {
   cat <<'EOF'
 Usage: mise run release
 
-checkとbuildを通した後に新しいversionを確認し、version更新、commit、tag、
-mainとtagのpush、GitHub Releaseの完了確認まで実行します。
+checkとbuildを通した後に新しいversionを確認し、version更新、Developer ID署名、
+notarization、commit、tag、mainとtagのpush、GitHub Releaseの完了確認まで実行します。
 EOF
 }
 
@@ -22,12 +22,30 @@ if [ "$#" -ne 0 ]; then
   exit 2
 fi
 
-for command_name in git gh mise perl; do
+for command_name in codesign ditto git gh mise perl python3 security spctl xcrun; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "error: required command not found: $command_name" >&2
     exit 1
   fi
 done
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "error: release must run on macOS for Developer ID signing and notarization" >&2
+  exit 1
+fi
+
+codesign_identity="${EVERES_CODESIGN_IDENTITY:-7DA45FCCFCD5D3F77D2D4E319EB3E0E116F1C29D}"
+codesign_identifier="${EVERES_CODESIGN_IDENTIFIER:-com.tsuyukimakoto.everes}"
+notary_profile="${EVERES_NOTARYTOOL_PROFILE:-everes-notary}"
+
+if ! security find-identity -v -p codesigning | grep -F "$codesign_identity" >/dev/null; then
+  echo "error: Developer ID Application identity is unavailable: $codesign_identity" >&2
+  exit 1
+fi
+if ! xcrun notarytool history --keychain-profile "$notary_profile" >/dev/null; then
+  echo "error: notarytool keychain profile is unavailable: $notary_profile" >&2
+  exit 1
+fi
 
 if [ "$(git branch --show-current)" != "main" ]; then
   echo "error: release must run on main" >&2
@@ -135,6 +153,9 @@ version_files=(
 versions_changed=false
 release_committed=false
 bundled_binary=".apm/skills/everes-task/bin/everes"
+signed_binary="build/everes-darwin-arm64"
+notary_archive="build/everes-darwin-arm64-notary.zip"
+notary_log="build/notarization-log.json"
 binary_backup="$(mktemp)"
 cp "$bundled_binary" "$binary_backup"
 rollback_version_edits() {
@@ -157,11 +178,70 @@ versions_changed=true
 echo "Validating release v$new_version..."
 mise run check
 mise run build
-install -m 0755 build/everes "$bundled_binary"
 git diff --check
 
 if [ "$(./build/everes version)" != "$new_version" ]; then
   echo "error: built CLI version does not match $new_version" >&2
+  exit 1
+fi
+
+echo "Signing $signed_binary..."
+install -m 0755 build/everes "$signed_binary"
+codesign \
+  --force \
+  --sign "$codesign_identity" \
+  --identifier "$codesign_identifier" \
+  --options runtime \
+  --timestamp \
+  "$signed_binary"
+codesign --verify --strict --verbose=2 "$signed_binary"
+
+rm -f -- "$notary_archive" "$notary_log"
+ditto -c -k --keepParent "$signed_binary" "$notary_archive"
+
+echo "Submitting $notary_archive for notarization..."
+if ! notary_output="$(xcrun notarytool submit \
+  "$notary_archive" \
+  --keychain-profile "$notary_profile" \
+  --wait \
+  --output-format json)"; then
+  printf '%s\n' "$notary_output" >&2
+  exit 1
+fi
+printf '%s\n' "$notary_output"
+
+notary_submission_id="$(printf '%s' "$notary_output" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("id", ""))')"
+notary_status="$(printf '%s' "$notary_output" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("status", ""))')"
+if [ -z "$notary_submission_id" ]; then
+  echo "error: notarytool response did not contain a submission ID" >&2
+  exit 1
+fi
+
+xcrun notarytool log \
+  "$notary_submission_id" \
+  --keychain-profile "$notary_profile" \
+  "$notary_log"
+notary_issue_count="$(python3 -c 'import json, sys; print(len(json.load(open(sys.argv[1])).get("issues") or []))' "$notary_log")"
+if [ "$notary_issue_count" != "0" ]; then
+  echo "error: notarization log contains $notary_issue_count issue(s)" >&2
+  echo "Notary log: $notary_log" >&2
+  exit 1
+fi
+if [ "$notary_status" != "Accepted" ]; then
+  echo "error: notarization finished with status $notary_status" >&2
+  echo "Notary log: $notary_log" >&2
+  exit 1
+fi
+
+spctl --assess --type execute --verbose=4 "$signed_binary"
+install -m 0755 "$signed_binary" "$bundled_binary"
+if ! cmp -s "$signed_binary" "$bundled_binary"; then
+  echo "error: bundled CLI differs from the signed and notarized binary" >&2
+  exit 1
+fi
+
+if [ "$("$signed_binary" version)" != "$new_version" ]; then
+  echo "error: signed CLI version does not match $new_version" >&2
   exit 1
 fi
 if [ "$("$bundled_binary" version)" != "$new_version" ]; then

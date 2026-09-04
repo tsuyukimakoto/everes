@@ -14,34 +14,25 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version: "1.26.6"
-          cache: false
-
-      - name: Build darwin/arm64
-        env:
-          TAG: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
+      - name: Prepare signed darwin/arm64 artifact
         run: |
           mkdir -p build
-          VERSION="${TAG}+${SHA::7}"
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 \
-            go build -trimpath \
-            -ldflags "-X github.com/tsuyukimakoto/everes/internal/cli.Version=${VERSION}" \
-            -o build/everes-darwin-arm64 ./cmd/everes
+          cp .apm/skills/everes-task/bin/everes build/everes-darwin-arm64
+          chmod 0755 build/everes-darwin-arm64
+          cd build
+          zip -9 everes-darwin-arm64.zip everes-darwin-arm64
 
       - name: Create checksum
         run: |
           cd build
-          sha256sum everes-darwin-arm64 > ../checksums.txt
+          sha256sum everes-darwin-arm64 everes-darwin-arm64.zip > ../checksums.txt
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            build/everes-darwin-arm64 checksums.txt \
+            build/everes-darwin-arm64 build/everes-darwin-arm64.zip checksums.txt \
             --verify-tag \
             --generate-notes \
             --title "$GITHUB_REF_NAME"
