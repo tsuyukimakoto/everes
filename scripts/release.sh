@@ -22,7 +22,7 @@ if [ "$#" -ne 0 ]; then
   exit 2
 fi
 
-for command_name in codesign ditto git gh mise perl python3 security spctl xcrun; do
+for command_name in codesign ditto git gh mise perl python3 security xcrun; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "error: required command not found: $command_name" >&2
     exit 1
@@ -233,7 +233,7 @@ if [ "$notary_status" != "Accepted" ]; then
   exit 1
 fi
 
-spctl --assess --type execute --verbose=4 "$signed_binary"
+codesign -vvvv -R="notarized" --check-notarization "$signed_binary"
 install -m 0755 "$signed_binary" "$bundled_binary"
 if ! cmp -s "$signed_binary" "$bundled_binary"; then
   echo "error: bundled CLI differs from the signed and notarized binary" >&2
