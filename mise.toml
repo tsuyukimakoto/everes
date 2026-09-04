@@ -13,7 +13,7 @@ go = "1.26.6"
 [env]
 BIN_DIR = "{{env.HOME}}/bin"
 # apm.yml の version と揃える。ズレるとSkillとCLIの対応が追えなくなる。
-EVERES_VERSION = "0.3.0"
+EVERES_VERSION = "0.4.0"
 
 [tasks.build]
 description = "everes をビルドして build/ へ出力"

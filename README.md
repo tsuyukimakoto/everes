@@ -28,7 +28,7 @@ See [USAGE.md](USAGE.md) for detailed usage and [docs/requirements.md](docs/requ
 One command installs the CLI, shared Skill, and SessionStart hooks for Claude Code and Codex from the same release tag:
 
 ```bash
-EVERES_VERSION=v0.3.0
+EVERES_VERSION=v0.4.0
 apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
 ```
 
@@ -46,7 +46,7 @@ APM installs the shared Skill into `~/.agents/skills/` and `~/.claude/skills/`, 
 Set `EVERES_VERSION` to the desired release tag and run the same install command:
 
 ```bash
-EVERES_VERSION=v0.3.0
+EVERES_VERSION=v0.4.0
 apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
 ```
 
@@ -62,7 +62,7 @@ If you also want to invoke `everes` directly from a terminal, the optional `inst
 To install it as a Go module, use Go 1.26 or later and specify a release tag:
 
 ```bash
-GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@v0.3.0
+GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@v0.4.0
 ```
 
 ### Installing from a repository checkout
@@ -212,7 +212,7 @@ apmがない場合は、先に[APM公式の導入手順](https://microsoft.githu
 CLI本体と、Claude Code / Codex用のSkillとhookを同じrelease tagから一括でインストールします。
 
 ```bash
-EVERES_VERSION=v0.3.0
+EVERES_VERSION=v0.4.0
 apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
 ```
 
@@ -230,7 +230,7 @@ APMパッケージはCLIを含む共通Skillと、Claude Code / Codexそれぞ�
 `EVERES_VERSION`を更新先のrelease tagにして、CLI本体とAPMパッケージを更新します。
 
 ```bash
-EVERES_VERSION=v0.3.0
+EVERES_VERSION=v0.4.0
 apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
 ```
 
@@ -241,7 +241,7 @@ apm install -g "tsuyukimakoto/everes#${EVERES_VERSION}" --target claude,codex
 Go moduleとして導入する場合は、Go 1.26以降を用意してrelease tagを指定します。
 
 ```bash
-GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@v0.3.0
+GOBIN="$HOME/bin" go install github.com/tsuyukimakoto/everes/cmd/everes@v0.4.0
 ```
 
 ### リポジトリから開発用に導入

@@ -1,5 +1,5 @@
 name: everes-claude-hook
-version: "0.3.0"
+version: "0.4.0"
 description: Everes SessionStart hook for Claude Code
 author: tsuyukimakoto
 license: MIT
