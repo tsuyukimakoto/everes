@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,56 @@ import (
 	"github.com/tsuyukimakoto/everes/internal/store"
 	"github.com/tsuyukimakoto/everes/internal/task"
 )
+
+func TestWriteSessionStartOutputUsesCodexJSONEnvelope(t *testing.T) {
+	const context = "[Everes] This session is not registered.\n"
+
+	var out bytes.Buffer
+	if err := writeSessionStartOutput(&out, "codex", context); err != nil {
+		t.Fatalf("writeSessionStartOutput() error = %v", err)
+	}
+
+	var got struct {
+		HookSpecificOutput struct {
+			HookEventName     string `json:"hookEventName"`
+			AdditionalContext string `json:"additionalContext"`
+		} `json:"hookSpecificOutput"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("output is not JSON: %v\noutput = %q", err, out.String())
+	}
+	if got.HookSpecificOutput.HookEventName != "SessionStart" {
+		t.Errorf("hookEventName = %q; want SessionStart", got.HookSpecificOutput.HookEventName)
+	}
+	if got.HookSpecificOutput.AdditionalContext != context {
+		t.Errorf("additionalContext = %q; want %q", got.HookSpecificOutput.AdditionalContext, context)
+	}
+}
+
+func TestWriteSessionStartOutputKeepsClaudePlainText(t *testing.T) {
+	const context = "[Everes] This session is not registered.\n"
+
+	var out bytes.Buffer
+	if err := writeSessionStartOutput(&out, "claude", context); err != nil {
+		t.Fatalf("writeSessionStartOutput() error = %v", err)
+	}
+
+	if got := out.String(); got != context {
+		t.Errorf("output = %q; want %q", got, context)
+	}
+}
+
+func TestWriteSessionStartOutputEmitsValidCodexJSONWithoutContext(t *testing.T) {
+	var out bytes.Buffer
+	if err := writeSessionStartOutput(&out, "codex", ""); err != nil {
+		t.Fatalf("writeSessionStartOutput() error = %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("output is not JSON: %v\noutput = %q", err, out.String())
+	}
+}
 
 func TestDetectHookProviderDoesNotGuessFromSharedEventName(t *testing.T) {
 	s := store.New(t.TempDir())

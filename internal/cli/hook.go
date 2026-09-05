@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,8 +43,8 @@ func runHook(args []string) error {
 // AIがconversationから状態を推測して書き換える設計を避けるためである。
 //
 // harnessのsession起動を妨げないよう、失敗しても常に成功終了する。
-// SessionStartではexit 0の標準出力がそのままcontextとして扱われるため、
-// 出力する内容がない場合は何も書かない。
+// Claude Codeは標準出力をそのままcontextとして扱う。
+// CodexはhookSpecificOutput.additionalContextを含むJSONを要求する。
 func runHookSessionStart(args []string) error {
 	fs := newFlagSet("hook session-start", os.Stderr)
 	providerName := fs.String("provider", "", "provider (claude, codex)")
@@ -53,11 +54,39 @@ func runHookSessionStart(args []string) error {
 		return err
 	}
 
-	if err := emitSessionStartContext(os.Stdout, *providerName, *sessionID); err != nil {
+	var context bytes.Buffer
+	if err := emitSessionStartContext(&context, *providerName, *sessionID); err != nil {
 		// contextを出せなくてもsessionは続行させる。
 		fmt.Fprintf(os.Stderr, "everes: hook session-start: %v\n", err)
 	}
+	if err := writeSessionStartOutput(os.Stdout, *providerName, context.String()); err != nil {
+		fmt.Fprintf(os.Stderr, "everes: hook session-start: %v\n", err)
+	}
 	return nil
+}
+
+func writeSessionStartOutput(w io.Writer, providerName, context string) error {
+	if providerName != "codex" {
+		_, err := io.WriteString(w, context)
+		return err
+	}
+
+	type hookSpecificOutput struct {
+		HookEventName     string `json:"hookEventName"`
+		AdditionalContext string `json:"additionalContext"`
+	}
+	type sessionStartOutput struct {
+		HookSpecificOutput *hookSpecificOutput `json:"hookSpecificOutput,omitempty"`
+	}
+
+	output := sessionStartOutput{}
+	if context != "" {
+		output.HookSpecificOutput = &hookSpecificOutput{
+			HookEventName:     "SessionStart",
+			AdditionalContext: context,
+		}
+	}
+	return json.NewEncoder(w).Encode(output)
 }
 
 func emitSessionStartContext(w io.Writer, providerName, sessionID string) error {

@@ -555,6 +555,9 @@ Codex用hookは次のコマンドを実行する。
 ClaudeとCodexは共通するhook入力フィールドを持つため、入力形式からproviderを推測しない。
 
 hookが受け取ったsession IDと固定したproviderをcontextへ出力し、Skillはその値を `--provider` と `--session-id` でCLIへ渡す。
+Claude Codeではcontextを標準出力へ直接書き出す。
+Codexでは標準出力全体をJSONとし、contextを `hookSpecificOutput.additionalContext` に格納する。
+`hookSpecificOutput.hookEventName` は `SessionStart` とする。
 
 Codex Adapterによる自動検出では、`~/.codex/sessions/` のrolloutファイルから末尾のUUIDを取得し、session metadataのcwdが現在のcwdと一致するものを候補にする。`thread_source` がある場合は `user` だけを採用し、subagentや権限確認用threadを対象外とする。
 

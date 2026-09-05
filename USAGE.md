@@ -531,6 +531,9 @@ Taskの作成やsessionの追加でも、同じ二つのoptionを指定できま
 ### hookが実行されない
 
 Codexでは `/hooks` を開き、EveresのSessionStart hookが有効か、信頼済みかを確認します。
+hookが失敗と表示される場合は詳細を開きます。
+`hook returned invalid session start JSON output` は、Codex用ではない古いEveres CLIがプレーンテキストを返している状態を表します。
+CLIとAPM packageを同じversionへ更新してから、新しいAgent Sessionで確認します。
 hook設定を変更した直後は、Claude CodeまたはCodexで新しいAgent Sessionを開始して確認します。
 
 ### Agent Sessionを再開できない
