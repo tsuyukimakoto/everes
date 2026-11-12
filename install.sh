@@ -12,7 +12,7 @@ if [ "$#" -ne 1 ]; then
 fi
 version="$1"
 if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
-  echo "error: version must be a release tag such as v0.4.1" >&2
+  echo "error: version must be a release tag such as v0.5.0" >&2
   exit 2
 fi
 
