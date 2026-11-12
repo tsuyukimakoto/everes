@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/tsuyukimakoto/everes/internal/provider"
@@ -375,6 +378,7 @@ func parseCheckAt(value string, location *time.Location) (time.Time, error) {
 func runTaskDone(args []string) error {
 	fs := newFlagSet("task done", os.Stderr)
 	asJSON := fs.Bool("json", false, "output JSON")
+	yes := fs.Bool("yes", false, "complete all attached sessions without prompting")
 
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -393,7 +397,20 @@ func runTaskDone(args []string) error {
 		return err
 	}
 
-	updated, err := s.Update(id, 0, func(t *task.Task) error {
+	current, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+	if !*yes {
+		confirmed, err := confirmTaskDone(current, os.Stdin, os.Stderr)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			return errors.New("cancelled; Task was not completed")
+		}
+	}
+	updated, err := s.Update(id, current.Revision, func(t *task.Task) error {
 		t.Complete()
 		return nil
 	})
@@ -406,6 +423,20 @@ func runTaskDone(args []string) error {
 	}
 	fmt.Printf("done %s  %s\n", updated.TaskID, updated.Title)
 	return nil
+}
+
+func confirmTaskDone(t *task.Task, input io.Reader, output io.Writer) (bool, error) {
+	fmt.Fprintf(output, "Completing Task %s (%s) will mark all attached sessions done:\n", t.TaskID, t.Title)
+	for _, session := range t.AgentSessions {
+		fmt.Fprintf(output, "  %s/%s  status=%s\n", session.Provider, session.SessionID, displaySessionStatus(session.Status))
+	}
+	fmt.Fprint(output, "Continue? [y/N] ")
+	line, err := bufio.NewReader(input).ReadString('\n')
+	if err != nil && err != io.EOF {
+		return false, err
+	}
+	answer := strings.ToLower(strings.TrimSpace(line))
+	return answer == "y" || answer == "yes", nil
 }
 
 func filterTasks(tasks []*task.Task, keep func(*task.Task) bool) []*task.Task {

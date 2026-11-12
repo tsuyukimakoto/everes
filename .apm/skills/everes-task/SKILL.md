@@ -185,10 +185,10 @@ Use `--` to mark the start of note text so words beginning with a hyphen remain 
 ### “This work is complete”
 
 ```bash
-everes task done <task-id>
+everes task done <task-id> --yes
 ```
 
-Completing a Task marks all attached Agent Sessions done. To complete only one session, run `everes session done <task-id> --provider <provider> --session-id <session-id>`.
+Completing a Task marks all attached Agent Sessions done. Use `--yes` only after the user explicitly requests or confirms completion of the whole Task and its sessions. To complete only one session, run `everes session done <task-id> --provider <provider> --session-id <session-id>`.
 
 ### “What am I working on?”
 
@@ -291,7 +291,7 @@ everes task create --title <title> [--objective ...] [--status ...] [--provider 
 everes task list [--json] [--status <status>] [--all]
 everes task show <task-id> [--json]
 everes task update <task-id> [--status ...] [--summary ...] [--next-action ...] [--resume-when ...]
-everes task done <task-id>
+everes task done <task-id> [--yes]
 
 everes session current [--provider ...] [--session-id ...] [--json]
 everes session list <task-id> [--json]

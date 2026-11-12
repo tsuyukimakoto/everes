@@ -1,11 +1,36 @@
 package cli
 
 import (
+	"bytes"
 	"flag"
 	"io"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/tsuyukimakoto/everes/internal/task"
 )
+
+func TestTaskDoneConfirmation(t *testing.T) {
+	tk, _ := task.New("確認対象")
+	tk.AttachSession(task.AgentSession{Provider: "codex", SessionID: "one"})
+	for _, tc := range []struct {
+		input string
+		want  bool
+	}{{"y\n", true}, {"yes\n", true}, {"n\n", false}, {"", false}} {
+		var output bytes.Buffer
+		got, err := confirmTaskDone(tk, strings.NewReader(tc.input), &output)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != tc.want {
+			t.Errorf("input %q: got %v", tc.input, got)
+		}
+		if !strings.Contains(output.String(), "active") || !strings.Contains(output.String(), "one") {
+			t.Errorf("missing session details: %s", output.String())
+		}
+	}
+}
 
 func TestListTerminalWidthUsesColumns(t *testing.T) {
 	t.Setenv("COLUMNS", "72")

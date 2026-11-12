@@ -270,6 +270,25 @@ func TestCompleteCascadesToSessions(t *testing.T) {
 	}
 }
 
+func TestCompletedTaskReopensWhenSessionChanges(t *testing.T) {
+	tk, _ := New("再開")
+	tk.AttachSession(AgentSession{Provider: "codex", SessionID: "one"})
+	tk.AttachSession(AgentSession{Provider: "claude", SessionID: "two"})
+	tk.Complete()
+	if err := tk.UpdateSession("codex", "one", func(s *AgentSession) error {
+		s.SetStatus(StatusActive)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if tk.Status != StatusActive || tk.Timestamps.CompletedAt != nil {
+		t.Fatalf("reopened task: status=%s completed_at=%v", tk.Status, tk.Timestamps.CompletedAt)
+	}
+	if tk.AgentSessions[1].Status != StatusDone {
+		t.Fatal("other session must remain done")
+	}
+}
+
 func TestAttachToCompletedTaskKeepsSessionDone(t *testing.T) {
 	tk, _ := New("完了済み")
 	tk.SetStatus(StatusDone)
