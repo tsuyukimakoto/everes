@@ -373,12 +373,8 @@ func (t *Task) UpdateSession(provider, sessionID string, update func(*AgentSessi
 }
 
 // RecomputeStatus は明示statusを持つsessionからTask statusを集約する。
-// doneはTaskで明示する終端状態であり、session更新では解除しない。
 // v1由来でstatusが空のsessionは推測せず集約から除外する。
 func (t *Task) RecomputeStatus() {
-	if t.Status == StatusDone {
-		return
-	}
 	has := map[Status]bool{}
 	for _, s := range t.AgentSessions {
 		if s.Status != "" {

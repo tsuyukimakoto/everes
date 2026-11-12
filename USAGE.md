@@ -400,6 +400,8 @@ everes task done <task-id>
 
 この操作は紐づく全Agent Sessionもdoneにします。一つのAgent Sessionだけを終える場合は `everes session done <task-id>` を使います。
 
+実行前に全sessionの状態を表示して確認します。`y` または `yes` を入力すると完了し、それ以外や入力終了時は変更しません。確認を省略する場合は `--yes` を指定します。完了後にsessionをactiveなどに変更すると、Taskの状態も再集約され、完了日時は消去されます。
+
 ## CLIでAgent Sessionを扱う
 
 現在のAgent Sessionに紐づくTaskを確認します。
@@ -553,7 +555,7 @@ everes task create --title <title> [--objective ...] [--summary ...] [--next-act
 everes task list [--json] [--status <status>] [--all]
 everes task show <task-id> [--json]
 everes task update <task-id> [--title ...] [--objective ...] [--status ...] [--summary ...] [--next-action ...] [--resume-when ...] [--check-at ...] [--check-action ...] [--revision ...] [--json]
-everes task done <task-id> [--json]
+everes task done <task-id> [--yes] [--json]
 
 everes session current [--provider ...] [--session-id ...] [--json]
 everes session list <task-id> [--json]

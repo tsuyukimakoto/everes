@@ -315,7 +315,7 @@ Taskの目的達成済み。
 3. activeとneeds_meがなくwaitingがあればTaskはwaiting
 4. pausedだけが残ればTaskはpaused
 
-v1から移行しstatusが未設定のsessionは `NOT_SET` と表示して集約から除外し、providerの実行状態やlast_seen_atから推測しない。`NOT_SET` はstatus enumには含めない。全sessionがdoneでもTaskは自動でdoneにしない。`task done`だけがTaskをdoneにし、そのとき全Agent Sessionをdoneにする。
+v1から移行しstatusが未設定のsessionは `NOT_SET` と表示して集約から除外し、providerの実行状態やlast_seen_atから推測しない。`NOT_SET` はstatus enumには含めない。全sessionがdoneでもTaskは自動でdoneにしない。`task done`だけがTaskをdoneにし、そのとき全Agent Sessionをdoneにする。完了後にsessionが未完了の状態へ変更された場合はTaskのstatusを再集約する。`task done`は対象sessionを表示して確認し、`--yes`で確認を省略できる。
 
 ---
 
